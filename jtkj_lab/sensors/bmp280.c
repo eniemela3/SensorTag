@@ -144,28 +144,44 @@ void bmp280_setup(I2C_Handle *i2c) {
     bmp280_set_trimming(rxBuffer);
 }
 
+uint32_t bitmask(uint8_t xlsb, uint8_t lsb, uint8_t msb) {
+    uint32_t paine = msb << 12;
+    uint16_t helper = lsb << 4;
+    xlsb &= 0b1111 << 4;
+    paine |= helper | xlsb;
+    return paine;
+}
+
 void bmp280_get_data(I2C_Handle *i2c, double *pres, double *temp) {
 
 	uint8_t txBuffer[1];
 	uint8_t rxBuffer[6];
 
 	/* JTKJ: FILL OUT THIS DATA STRUCTURE TO ASK DATA
-	txBuffer[0] = ...
-    i2cTransaction.slaveAddress = ...
-    i2cTransaction.writeBuf = ...
-    i2cTransaction.writeCount = ...
-    i2cTransaction.readBuf = ...
-    i2cTransaction.readCount = ...
-	*/
+	 */
+	txBuffer[0] = BMP280_REG_PRESS_MSB;
+    i2cTransaction.slaveAddress = Board_BMP280_ADDR;
+    i2cTransaction.writeBuf = &txBuffer;
+    i2cTransaction.writeCount = 1;
+    i2cTransaction.readBuf = &rxBuffer;
+    i2cTransaction.readCount = 6;
+
+    uint32_t temperature;
+    uint32_t pressure;
 
     if (I2C_transfer(*i2c, &i2cTransaction)) {
 
 		// JTKJ: HERE YOU GET THE AIR PRESSURE AND TEMPERATURE VALUES FROM rxBuffer AS BYTES
         // BY USING BIT WISE OPERATIONS AS IN THE EXERCISES
 
+        temperature = bitmask(rxBuffer[5], rxBuffer[4], rxBuffer[3]);
+        pressure = bitmask(rxBuffer[2], rxBuffer[1], rxBuffer[0]);
+
 		// FIRST, USE FUNCTION bmp280_convert_temp() TO CONVERT RAW TEMPERATURE VALUE
     	// THIS WILL INITIALIZE TEMPERATURE COMPENSATION, WHICH IS NEEDED BY PRESSURE CONVERSION
+        *temp = bmp280_convert_temp(temperature);
 		// THEN, USE FUNCTION bmp280_convert_pres() TO CONVERT RAW PRESSURE VALUE TO PASCALS
+        *pres = bmp280_convert_pres(pressure);
 
     } else {
 

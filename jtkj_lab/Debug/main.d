@@ -1,6 +1,9 @@
 # FIXED
 
 main.obj: ../main.c
+main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdio.h
+main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/linkage.h
+main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdarg.h
 main.obj: C:/ti/xdctools_3_32_00_06_core/packages/xdc/std.h
 main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdarg.h
 main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stddef.h
@@ -199,14 +202,13 @@ main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/mw/display/DisplayExt.h
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/mw/grlib/grlib.h
 main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/assert.h
-main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/linkage.h
 main.obj: ../Board.h
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/drivers/Power.h
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/drivers/utils/List.h
 main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stddef.h
 main.obj: ../CC2650STK.h
 main.obj: ../wireless/comm_lib.h
-main.obj: C:/Users/eniem/workspace_v7/jtkj_lab/wireless/CWC_CC2650_154Drv.h
+main.obj: C:/Users/eniem/Documents/GitHub/SensorTag/jtkj_lab/wireless/CWC_CC2650_154Drv.h
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/cc26xxware_2_24_03_17272/driverlib/rf_data_entry.h
 main.obj: C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/cc26xxware_2_24_03_17272/driverlib/rf_mailbox.h
 main.obj: C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/string.h
@@ -214,6 +216,9 @@ main.obj: ../wireless/address.h
 main.obj: ../sensors/bmp280.h
 
 ../main.c: 
+C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdio.h: 
+C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/linkage.h: 
+C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdarg.h: 
 C:/ti/xdctools_3_32_00_06_core/packages/xdc/std.h: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stdarg.h: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stddef.h: 
@@ -412,14 +417,13 @@ C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_0
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/mw/display/DisplayExt.h: 
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/mw/grlib/grlib.h: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/assert.h: 
-C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/linkage.h: 
 ../Board.h: 
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/drivers/Power.h: 
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/ti/drivers/utils/List.h: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/stddef.h: 
 ../CC2650STK.h: 
 ../wireless/comm_lib.h: 
-C:/Users/eniem/workspace_v7/jtkj_lab/wireless/CWC_CC2650_154Drv.h: 
+C:/Users/eniem/Documents/GitHub/SensorTag/jtkj_lab/wireless/CWC_CC2650_154Drv.h: 
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/cc26xxware_2_24_03_17272/driverlib/rf_data_entry.h: 
 C:/ti/tirtos_cc13xx_cc26xx_2_21_00_06/products/cc26xxware_2_24_03_17272/driverlib/rf_mailbox.h: 
 C:/ti/ccsv7/tools/compiler/ti-cgt-arm_16.9.4.LTS/include/string.h: 

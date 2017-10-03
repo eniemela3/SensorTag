@@ -1,3 +1,4 @@
+#include <stdio.h>
 /*
  *  ======== main.c ========
  */
@@ -81,11 +82,15 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 
     PIN_setOutputValue( hLed, Board_LED0, !PIN_getOutputValue( Board_LED0 ) );
-
+    char msg[8] = "Tere";
+    Send6LoWPAN(IEEE80154_SERVER_ADDR, msg, 8);
 }
 
 /* jtkj: Communication Task */
 Void commTask(UArg arg0, UArg arg1) {
+
+    char payload[16];
+    uint16_t SenderAddr;
 
     // Radio to receive mode
 	int32_t result = StartReceive6LoWPAN();
@@ -97,6 +102,12 @@ Void commTask(UArg arg0, UArg arg1) {
 
     	// COMMUNICATION WHILE LOOP DOES NOT USE Task_sleep
     	// (It has lower priority than main loop)
+        if (GetRXFlag() == true) {
+            memset(payload, 0, 16);
+            Receive6LoWPAN(&SenderAddr, payload, 16);
+            System_printf(payload);
+            System_flush();
+        }
     }
 }
 
@@ -116,6 +127,8 @@ Void labTask(UArg arg0, UArg arg1) {
 
     // JTKJ: SETUP BMP280 SENSOR HERE
 
+    bmp280_setup(&i2c);
+
     /* jtkj: Init Display */
     Display_Params displayParams;
 	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
@@ -128,13 +141,29 @@ Void labTask(UArg arg0, UArg arg1) {
 
     /* jtkj: Check that Display works */
     Display_clear(hDisplay);
-    Display_print0(hDisplay, 5, 1, "Shall we play");
-    Display_print0(hDisplay, 7, 1, "    a game?");
+    char str[3];
+    sprintf(str, "%d", IEEE80154_MY_ADDR);
+    Display_print0(hDisplay, 7, 7, str);
 
+    double pres;
+    double temp;
+    char t[16];
+    char p[16];
     // jtkj: main loop
     while (1) {
 
     	// JTKJ: READ SENSOR DATA
+
+        Display_clear(hDisplay);
+
+        bmp280_get_data(&i2c, &pres, &temp);
+
+        pres /= 100;
+
+        sprintf(p, "%.3f hPa", pres);
+        sprintf(t, "%.3f F", temp);
+        Display_print0(hDisplay, 0, 0, p);
+        Display_print0(hDisplay, 1, 0, t);
 
     	// jtkj: Do not remove sleep-call from here!
     	Task_sleep(1000000 / Clock_tickPeriod);
@@ -198,6 +227,7 @@ Int main(void) {
 
     Init6LoWPAN();
     
+
     hCommTask = Task_create(commTask, &commTaskParams, NULL);
     if (hCommTask == NULL) {
     	System_abort("Task create failed!");
