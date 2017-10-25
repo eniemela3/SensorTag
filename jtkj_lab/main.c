@@ -27,6 +27,7 @@
 #define STACKSIZE 4096
 Char labTaskStack[STACKSIZE];
 Char commTaskStack[STACKSIZE];
+Char clockStack[STACKSIZE];
 
 /* jtkj: Display */
 Display_Handle hDisplay;
@@ -83,7 +84,24 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 
     PIN_setOutputValue( hLed, Board_LED0, !PIN_getOutputValue( Board_LED0 ) );
     char msg[8] = "Tere";
+
     Send6LoWPAN(IEEE80154_SERVER_ADDR, msg, 8);
+}
+
+Void clkFxn2(UArg arg0) {
+    PIN_setOutputValue( hLed, Board_LED1, !PIN_getOutputValue( Board_LED1 ) );
+}
+// Kellokeskeytyksen käsittelijä
+Void clkFxn(UArg arg0) {
+    PIN_setOutputValue( hLed, Board_LED0, !PIN_getOutputValue( Board_LED0 ) );
+    /*
+   char str[16];
+   sprintf(str,"System time: %.5fs\n", (double)Clock_getTicks() / 100000.0);
+   System_printf(str);
+   System_flush();
+    */
+   //Display_clear(hDisplay);
+   //Display_print0(hDisplay, 1, 0, str);
 }
 
 /* jtkj: Communication Task */
@@ -111,13 +129,13 @@ Void commTask(UArg arg0, UArg arg1) {
     }
 }
 
-/* JTKJ: laboratory exercise task */
+/* JTKJ: laboratory exercise task
 Void labTask(UArg arg0, UArg arg1) {
 
     I2C_Handle      i2c;
     I2C_Params      i2cParams;
 
-    /* jtkj: Create I2C for usage */
+    jtkj: Create I2C for usage
     I2C_Params_init(&i2cParams);
     i2cParams.bitRate = I2C_400kHz;
     i2c = I2C_open(Board_I2C0, &i2cParams);
@@ -129,7 +147,7 @@ Void labTask(UArg arg0, UArg arg1) {
 
     bmp280_setup(&i2c);
 
-    /* jtkj: Init Display */
+     jtkj: Init Display
     Display_Params displayParams;
 	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
     Display_Params_init(&displayParams);
@@ -139,7 +157,7 @@ Void labTask(UArg arg0, UArg arg1) {
         System_abort("Error initializing Display\n");
     }
 
-    /* jtkj: Check that Display works */
+     jtkj: Check that Display works
     Display_clear(hDisplay);
     char str[3];
     sprintf(str, "%d", IEEE80154_MY_ADDR);
@@ -169,18 +187,46 @@ Void labTask(UArg arg0, UArg arg1) {
     	Task_sleep(1000000 / Clock_tickPeriod);
     }
 }
+*/
+
+Clock_Params CreateTimer(uint8_t period, Clock_FuncPtr clkFxn) {
+    // RTOS:n kellomuuttujat
+    Clock_Handle clkHandle;
+    Clock_Params clkParams;
+
+    // Alustetaan kello halutusti
+    Clock_Params_init(&clkParams);
+    clkParams.period = 1000000 * period / Clock_tickPeriod; // 1 second
+    clkParams.startFlag = TRUE;
+
+    // Luodaan kello
+    clkHandle = Clock_create((Clock_FuncPtr)clkFxn, 1000000 * period / Clock_tickPeriod, &clkParams, NULL);
+    if (clkHandle == NULL) {
+    System_abort("Clock creat failed");
+    }
+    return clkParams;
+}
+
+// ERIKA todo: MPU gyro + kiihtyvyys
+
+// ANTTI todo: pikseligrafiikka
 
 Int main(void) {
 
     // Task variables
-	Task_Handle hLabTask;
+	//Task_Handle hLabTask;
 	Task_Params labTaskParams;
 	Task_Handle hCommTask;
 	Task_Params commTaskParams;
 
+	Clock_Params serverTimer = CreateTimer(1, clkFxn);
+	Clock_Params gameTimer = CreateTimer(2, clkFxn2);
+
     // Initialize board
     Board_initGeneral();
     Board_initI2C();
+
+
 
 	/* jtkj: Power Button */
 	hPowerButton = PIN_open(&sPowerButton, cPowerButton);
@@ -208,7 +254,7 @@ Int main(void) {
         System_abort("Error initializing LED pin\n");
     }
 
-    /* jtkj: Init Main Task */
+    /* jtkj: Init Main Task
     Task_Params_init(&labTaskParams);
     labTaskParams.stackSize = STACKSIZE;
     labTaskParams.stack = &labTaskStack;
@@ -218,21 +264,26 @@ Int main(void) {
     if (hLabTask == NULL) {
     	System_abort("Task create failed!");
     }
-
-    /* jtkj: Init Communication Task */
+    */
+    /* jtkj: Init Communication Task
     Task_Params_init(&commTaskParams);
     commTaskParams.stackSize = STACKSIZE;
     commTaskParams.stack = &commTaskStack;
     commTaskParams.priority=1;
+*/
+    Task_Params_init(&serverTimer);
+    /*clkParams.stackSize = STACKSIZE;
+    clkParams.stack = &clkStack;
+    clkParams.priority=1;*/
 
     Init6LoWPAN();
     
-
+/*
     hCommTask = Task_create(commTask, &commTaskParams, NULL);
     if (hCommTask == NULL) {
     	System_abort("Task create failed!");
     }
-
+*/
     // jtkj: Send OK to console
     System_printf("Hello world!\n");
     System_flush();
