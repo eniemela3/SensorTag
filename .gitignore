@@ -1,0 +1,12 @@
+# Ignoraa kaikki tiedostot
+*.*
+
+# Paitsi seuraavat:
+!*.c
+!*.h
+!.gitignore
+!README.md
+!Suunnitelma.pdf
+
+# Mutta poista tämä c-tiedosto:
+CC2650STK.c
