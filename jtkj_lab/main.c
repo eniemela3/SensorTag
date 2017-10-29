@@ -189,6 +189,32 @@ Void labTask(UArg arg0, UArg arg1) {
 }
 */
 
+Void MPU9250Task(UArg arg0, UArg arg1) {
+    I2C_Handle      i2c;
+    I2C_Params      i2cParams;
+
+    I2C_Params_init(&i2cParams);
+    i2cParams.bitRate = I2C_400kHz;
+    i2c = I2C_open(Board_I2C0, &i2cParams);
+    if (i2c == NULL) {
+        System_abort("Error Initializing I2C\n");
+    }
+
+    mpu9250_setup(&i2c);
+    unsigned short samplerate = ?;
+    float ax;
+    float ay;
+    float az;
+    float gx;
+    float gy;
+    float gz;
+
+    while (1) {
+        mpu9250_get_data(&i2c, &ax, &ay, &az, &gx, &gy, &gz);
+        Task_sleep(1000000 / samplerate);
+    }
+}
+
 Clock_Params CreateTimer(uint8_t period, Clock_FuncPtr clkFxn) {
     // RTOS:n kellomuuttujat
     Clock_Handle clkHandle;
