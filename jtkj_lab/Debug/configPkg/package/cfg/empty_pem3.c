@@ -1184,7 +1184,7 @@ typedef struct ti_sysbios_family_arm_m3_Hwi_Module_State__ {
     __TA_ti_sysbios_family_arm_m3_Hwi_Module_State__excStack excStack;
     xdc_Ptr isrStack;
     xdc_Ptr isrStackBase;
-    xdc_Ptr isrStackSize;
+    xdc_SizeT isrStackSize;
     xdc_Ptr vectorTableBase;
     xdc_UInt swiTaskKeys;
     xdc_Ptr dispatchTable;
@@ -1204,9 +1204,6 @@ __T1_ti_sysbios_family_arm_m3_Hwi_Module_State__excStack ti_sysbios_family_arm_m
 
 /* --> __TI_STACK_BASE */
 extern void* __TI_STACK_BASE;
-
-/* --> __TI_STACK_SIZE */
-extern void* __TI_STACK_SIZE;
 
 /* Module__state__V */
 ti_sysbios_family_arm_m3_Hwi_Module_State__ ti_sysbios_family_arm_m3_Hwi_Module__state__V;
@@ -1780,7 +1777,7 @@ __FAR__ const xdc_SizeT ti_sysbios_knl_Task_Module_State_terminatedQ__O = offset
  *  Define absolute path prefix for this executable's
  *  configuration generated files.
  */
-xdc__META(__ASM__, "@(#)__ASM__ = C:/Users/eniem/Documents/GitHub/SensorTag/jtkj_lab/Debug/configPkg/package/cfg/empty_pem3");
+xdc__META(__ASM__, "@(#)__ASM__ = C:/Users/Hemuli/workspace_v6_1_3/jtkj_lab/Debug/configPkg/package/cfg/empty_pem3");
 
 /*
  *  ======== __ISA__ ========
@@ -2362,7 +2359,7 @@ UInt32 ti_sysbios_family_arm_m3_Hwi_dispatchTable[50];
 Void ti_sysbios_family_arm_m3_Hwi_initIsrStackSize()
 {
     #pragma section = "CSTACK"
-        ti_sysbios_family_arm_m3_Hwi_Module__state__V.isrStackSize = (Void *)__section_size("CSTACK");
+        ti_sysbios_family_arm_m3_Hwi_Module__state__V.isrStackSize = (SizeT)__section_size("CSTACK");
 }
 #endif
 
@@ -3302,7 +3299,7 @@ ti_sysbios_family_arm_m3_Hwi_Module_State__ ti_sysbios_family_arm_m3_Hwi_Module_
     ((void*)ti_sysbios_family_arm_m3_Hwi_Module_State_0_excStack__A),  /* excStack */
     ((xdc_Ptr)0),  /* isrStack */
     ((xdc_Ptr)((void*)&__TI_STACK_BASE)),  /* isrStackBase */
-    ((xdc_Ptr)((void*)&__TI_STACK_SIZE)),  /* isrStackSize */
+    (xdc_SizeT)0x300,  /* isrStackSize */
     ((xdc_Ptr)(0x20000000)),  /* vectorTableBase */
     (xdc_UInt)0x101,  /* swiTaskKeys */
     ((xdc_Ptr)((void*)&ti_sysbios_family_arm_m3_Hwi_dispatchTable[0])),  /* dispatchTable */

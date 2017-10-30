@@ -309,15 +309,6 @@ typedef enum CC2650STK_PWM
     CC2650STK_PWMCOUNT
 } CC2650STK_PWM;
 
-/*!
- *  @def    CC2650STK_WatchdogName
- *  @brief  Enum of Watchdogs on the CC2650STK dev board
- */
-typedef enum CC2650STK_WatchdogName {
-    CC2650STK_WATCHDOG0 = 0,
-
-    CC2650STK_WATCHDOGCOUNT
-} CC2650STK_WatchdogName;
 
 #ifdef __cplusplus
 }
