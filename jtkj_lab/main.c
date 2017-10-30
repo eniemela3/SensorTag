@@ -1,3 +1,4 @@
+//turha kommentti
 #include <stdio.h>
 /*
  *  ======== main.c ========
