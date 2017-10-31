@@ -11,8 +11,8 @@
 
 /* TI-RTOS Header files */
 #include <ti/drivers/I2C.h>
-#include <ti/drivers/PIN.h>
 #include <ti/drivers/i2c/I2CCC26XX.h>
+#include <ti/drivers/PIN.h>
 #include <ti/drivers/pin/PINCC26XX.h>
 #include <ti/mw/display/Display.h>
 #include <ti/mw/display/DisplayExt.h>
@@ -109,12 +109,17 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 /* JTKJ: HERE YOUR HANDLER FOR BUTTON0 PRESS */
 
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
-    PIN_setOutputValue( hLed, Board_LED0, !PIN_getOutputValue( Board_LED0 ) );
+    PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0) );
+//    char msg[8] = "Tere";
+//    Send6LoWPAN(IEEE80154_SERVER_ADDR, msg, 8);
 }
 
-/* jtkj: Communication Task */
-Void commTask(UArg arg0, UArg arg1) {
 
+//jtkj: Communication Task
+Void commTask(UArg arg0, UArg arg1) {
+	while (myState == STARTUP) {
+		// prevent data receive during startup
+	}
     char payload[16];
     uint16_t SenderAddr;
 
@@ -123,17 +128,14 @@ Void commTask(UArg arg0, UArg arg1) {
 	if(result != true) {
 		System_abort("Wireless receive mode failed");
 	}
-	while (myState == STARTUP) {
-	      // prevent data receive during startup
-	}
-    while (1) {
 
+    while (1) {
     	// COMMUNICATION WHILE LOOP DOES NOT USE Task_sleep
     	// (It has lower priority than main loop)
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
-            char rata[10];
+            uint8_t rata[10];
             sprintf(rata, "%d\n", payload[0]);
             System_printf(rata);
             System_flush();
@@ -141,171 +143,189 @@ Void commTask(UArg arg0, UArg arg1) {
     }
 }
 
-/* JTKJ: laboratory exercise task
-Void labTask(UArg arg0, UArg arg1) {
+////JTKJ: laboratory exercise task
+//Void labTask(UArg arg0, UArg arg1) {
+//
+//	I2C_Handle      i2c;
+//	I2C_Params      i2cParams;
+//
+////	jtkj: Create I2C for usage
+//	I2C_Params_init(&i2cParams);
+//	i2cParams.bitRate = I2C_400kHz;
+//	i2c = I2C_open(Board_I2C0, &i2cParams);
+//	if (i2c == NULL) {
+//		System_abort("Error Initializing I2C\n");
+//	}
+//
+////	JTKJ: SETUP BMP280 SENSOR HERE
+//	bmp280_setup(&i2c);
+//
+////	jtkj: Init Display
+//	Display_Params displayParams;
+//	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
+//	Display_Params_init(&displayParams);
+//
+//	hDisplay = Display_open(Display_Type_LCD, &displayParams);
+//	if (hDisplay == NULL) {
+//		System_abort("Error initializing Display\n");
+//	}
+//
+////	jtkj: Check that Display works
+//	Display_clear(hDisplay);
+//	char str[3];
+//	sprintf(str, "%d", IEEE80154_MY_ADDR);
+//	Display_print0(hDisplay, 7, 7, str);
+//
+//	double pres;
+//	double temp;
+//	char t[16];
+//	char p[16];
+////	jtkj: main loop
+//	while (1) {
+////		JTKJ: READ SENSOR DATA
+//		bmp280_get_data(&i2c, &pres, &temp);
+//
+//		pres /= 100;
+//
+//		sprintf(p, "%.3f hPa", pres);
+//		sprintf(t, "%.3f F", temp);
+//		Display_clear(hDisplay);
+//		Display_print0(hDisplay, 0, 0, p);
+//		Display_print0(hDisplay, 1, 0, t);
+//
+////		jtkj: Do not remove sleep-call from here!
+//		Task_sleep(1000000 / Clock_tickPeriod);
+//	}
+//}
 
-    I2C_Handle      i2c;
-    I2C_Params      i2cParams;
 
-    jtkj: Create I2C for usage
-    I2C_Params_init(&i2cParams);
-    i2cParams.bitRate = I2C_400kHz;
-    i2c = I2C_open(Board_I2C0, &i2cParams);
-    if (i2c == NULL) {
-        System_abort("Error Initializing I2C\n");
-    }
-
-    // JTKJ: SETUP BMP280 SENSOR HERE
-
-    bmp280_setup(&i2c);
-
-     jtkj: Init Display
-    Display_Params displayParams;
-	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
-    Display_Params_init(&displayParams);
-
-    hDisplay = Display_open(Display_Type_LCD, &displayParams);
-    if (hDisplay == NULL) {
-        System_abort("Error initializing Display\n");
-    }
-
-     jtkj: Check that Display works
-    Display_clear(hDisplay);
-    char str[3];
-    sprintf(str, "%d", IEEE80154_MY_ADDR);
-    Display_print0(hDisplay, 7, 7, str);
-
-    double pres;
-    double temp;
-    char t[16];
-    char p[16];
-    // jtkj: main loop
-    while (1) {
-
-    	// JTKJ: READ SENSOR DATA
-
-        Display_clear(hDisplay);
-
-        bmp280_get_data(&i2c, &pres, &temp);
-
-        pres /= 100;
-
-        sprintf(p, "%.3f hPa", pres);
-        sprintf(t, "%.3f F", temp);
-        Display_print0(hDisplay, 0, 0, p);
-        Display_print0(hDisplay, 1, 0, t);
-
-    	// jtkj: Do not remove sleep-call from here!
-    	Task_sleep(1000000 / Clock_tickPeriod);
-    }
-}
-*/
-
+// ERIKA todo: MPU gyro + kiihtyvyys
 Void MPU9250Task(UArg arg0, UArg arg1) {
-//    I2C_Handle      i2c;
-//    I2C_Params      i2cParams;
-    I2C_Handle      i2cMPU;
-    I2C_Params      i2cMPUParams;
+//	I2C_Handle      i2c;
+//	I2C_Params      i2cParams;
+	I2C_Handle      i2cMPU;
+	I2C_Params      i2cMPUParams;
 
-    I2C_Params_init(&i2cMPUParams);
-    i2cMPUParams.bitRate = I2C_400kHz;
-    i2cMPUParams.custom = (uintptr_t)&i2cMPUCfg;
-    i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
-    if (i2cMPU == NULL) {
-    System_abort("Error Initializing I2CMPU\n");
-    }
+	I2C_Params_init(&i2cMPUParams);
+	i2cMPUParams.bitRate = I2C_400kHz;
+	i2cMPUParams.custom = (uintptr_t)&i2cMPUCfg;
+	i2cMPU = I2C_open(Board_I2C, &i2cMPUParams);
+	if (i2cMPU == NULL) {
+		System_abort("Error Initializing I2CMPU\n");
+	}
 
-    mpu9250_setup(&i2cMPU);
-    if (myState == STARTUP) {
-        myState = MENU;
-    }
-    else {
-       System_abort("Error: incorrect state\n");
-    }
-    while (1) {
-        mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-        Task_sleep(1000000 / Clock_tickPeriod);
-    }
+	PIN_setOutputValue(hMpuPin,Board_MPU_POWER, Board_MPU_POWER_ON);
+	Task_sleep(100000 / Clock_tickPeriod);
+	System_printf("MPU9250: Power ON\n");
+	System_flush();
+
+	mpu9250_setup(&i2cMPU);
+
+	unsigned short samplerate = 1000000;
+
+	if (myState == STARTUP) {
+		myState = MENU;
+	}
+	else {
+		System_abort("Error: incorrect state\n");
+	}
+
+
+	while (1) {
+		mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
+//		Task_sleep(1000000 / samplerate);
+		Task_sleep(1000000 / Clock_tickPeriod);
+	}
 }
 
+
+// ANTTI todo: pikseligrafiikka
 Void displayTask(UArg arg0, UArg arg1) {
-    // Init Display
-    Display_Params displayParams;
-    Display_Params_init(&displayParams);
-    displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
-    //        DISPLAY_CLEAR_NONE = 0,   !< Do not clear anything before writing
-    //        DISPLAY_CLEAR_LEFT,       !< Clear pixels to left of text on the line
-    //        DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
-    //        DISPLAY_CLEAR_BOTH        !< Clear pixels on both sides of text
 
-    hDisplay = Display_open(Display_Type_LCD, &displayParams);
-    if (hDisplay == NULL) {
-        System_abort("Error initializing Display\n");
-    }
-        ////    jtkj: Check that Display works
-         //    Display_clear(hDisplay);
-         //    char str[3];
-         //    sprintf(str, "%d", IEEE80154_MY_ADDR);
-         //    Display_print0(hDisplay, 7, 7, str);
+//	Init Display
+	Display_Params displayParams;
+	Display_Params_init(&displayParams);
+	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
+//		DISPLAY_CLEAR_NONE = 0,   !< Do not clear anything before writing
+//	    DISPLAY_CLEAR_LEFT,       !< Clear pixels to left of text on the line
+//	    DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
+//	    DISPLAY_CLEAR_BOTH        !< Clear pixels on both sides of text
 
-    while (1) {
-        // Display_clear(hDisplay);
+	hDisplay = Display_open(Display_Type_LCD, &displayParams);
+	if (hDisplay == NULL) {
+		System_abort("Error initializing Display\n");
+	}
 
-        // näytölle viivoilla X
-        tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
-        if (pContext) {
-            // Piirretään puskuriin kaksi linjaa näytön poikki x:n muotoon
-            GrLineDraw(pContext,0,0,96,96);
-            GrLineDraw(pContext,0,96,96,0);
+////	jtkj: Check that Display works
+//	Display_clear(hDisplay);
+//	char str[3];
+//	sprintf(str, "%d", IEEE80154_MY_ADDR);
+//	Display_print0(hDisplay, 7, 7, str);
 
-            // Piirto puskurista näytölle
-            GrFlush(pContext);
-        }
+	while (1) {
+//		Display_clear(hDisplay);
 
-        char text[17];
-        sprintf(text, "ax = %.3f", ax);
-        Display_print0(hDisplay, 0, 0, text);
-        sprintf(text, "ay = %.3f", ay);
-        Display_print0(hDisplay, 1, 0, text);
-        sprintf(text, "az = %.3f", az);
-        Display_print0(hDisplay, 2, 0, text);
-        sprintf(text, "gx = %.3f", gx);
-        Display_print0(hDisplay, 3, 0, text);
-        sprintf(text, "gy = %.3f", gy);
-        Display_print0(hDisplay, 4, 0, text);
-        sprintf(text, "gz = %.3f", gz);
-        Display_print0(hDisplay, 5, 0, text);
-                  //        Display_print0(hDisplay, 11, 0, "0123456789ABCDEF");
-         //        int i;
-         //        for(i = 0; i < 16; i++) {
-         //            if(i>=11)
-         //                Display_print0(hDisplay, 11, i, "O");
-         //            else
-         //                Display_print0(hDisplay, i, i, "O");
-         ///          char text[3];
-         ////          sprintf(text, "%d", i);
-         ////          Display_print0(hDisplay, i, i, text);
-         //        }
-         //        jtkj: Do not remove sleep-call from here!
-        Task_sleep(1000000 / Clock_tickPeriod);
-    }
+//	näytölle viivoilla X
+		tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
+		if (pContext) {
+
+			// Piirretään puskuriin kaksi linjaa näytön poikki x:n muotoon
+			GrLineDraw(pContext,0,0,96,96);
+			GrLineDraw(pContext,0,96,96,0);
+
+			// Piirto puskurista näytölle
+			GrFlush(pContext);
+		}
+
+		char text[17];
+		sprintf(text, "ax = %.3f", ax);
+		Display_print0(hDisplay, 0, 0, text);
+		sprintf(text, "ay = %.3f", ay);
+		Display_print0(hDisplay, 1, 0, text);
+		sprintf(text, "az = %.3f", az);
+		Display_print0(hDisplay, 2, 0, text);
+		sprintf(text, "gx = %.3f", gx);
+		Display_print0(hDisplay, 3, 0, text);
+		sprintf(text, "gy = %.3f", gy);
+		Display_print0(hDisplay, 4, 0, text);
+		sprintf(text, "gz = %.3f", gz);
+		Display_print0(hDisplay, 5, 0, text);
+
+//		Display_print0(hDisplay, 11, 0, "0123456789ABCDEF");
+//		int i;
+//		for(i = 0; i < 16; i++) {
+//			if(i>=11)
+//				Display_print0(hDisplay, 11, i, "O");
+//			else
+//				Display_print0(hDisplay, i, i, "O");
+////			char text[3];
+////			sprintf(text, "%d", i);
+////			Display_print0(hDisplay, i, i, text);
+//		}
+//		jtkj: Do not remove sleep-call from here!
+		Task_sleep(1000000 / Clock_tickPeriod);
+	}
 }
+
+
+
 
 Int main(void) {
+//	Task variables
+	Task_Handle hMPU9250Task;
+	Task_Params MPU9250TaskParams;
+	Task_Handle hdisplayTask;
+	Task_Params displayTaskParams;
+//	Task_Handle hLabTask;
+//	Task_Params labTaskParams;
+	Task_Handle hCommTask;
+	Task_Params commTaskParams;
 
-    // Task variables
-    Task_Handle hMPU9250Task;
-    Task_Params MPU9250TaskParams;
-    Task_Handle hdisplayTask;
-    Task_Params displayTaskParams;
-    Task_Handle hCommTask;
-    Task_Params commTaskParams;
+//	Initialize board
+	Board_initGeneral();
+	Board_initI2C();
 
-    // Initialize board
-    Board_initGeneral();
-    Board_initI2C();
-
-	// Power button
+//	jtkj: Power Button
 	hPowerButton = PIN_open(&sPowerButton, cPowerButton);
 	if(!hPowerButton) {
 		System_abort("Error initializing power button shut pins\n");
@@ -314,7 +334,7 @@ Int main(void) {
 		System_abort("Error registering power button callback function");
 	}
 
-    // Button0 initialization
+//	JTKJ: INITIALIZE BUTTON0 HERE
 	hButton0 = PIN_open(&sButton0, cButton0);
 	if(!hButton0) {
 	    System_abort("Error initializing led button shut pins\n");
@@ -323,49 +343,62 @@ Int main(void) {
 	    System_abort("Error registering led button callback function");
 	}
 
-    // Led initialization
+//	jtkj: Init Leds
     hLed = PIN_open(&sLed, cLed);
     if(!hLed) {
         System_abort("Error initializing LED pin\n");
     }
 
-    // DisplayTask initialization
+//	Init displayTask
     Task_Params_init(&displayTaskParams);
     displayTaskParams.stackSize = STACKSIZE_displayTask;
-    displayTaskParams.stack       = &displayTaskStack;
-    displayTaskParams.priority    = 2;
+    displayTaskParams.stack		= &displayTaskStack;
+    displayTaskParams.priority	= 2;
 
     hdisplayTask = Task_create(displayTask, &displayTaskParams, NULL);
     if (hdisplayTask == NULL) {
-        System_abort("displayTask create failed!");
+    	System_abort("displayTask create failed!");
     }
+
+
     // OPEN MPU POWER PIN
     hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
     if (hMpuPin == NULL) {
-        System_abort("Pin open failed!");
+    	System_abort("Pin open failed!");
     }
-    // MPU9250Task initialization
+    //	Init MPU9250Task
     Task_Params_init(&MPU9250TaskParams);
-    MPU9250TaskParams.stackSize   = STACKSIZE_MPU9250Task;
-    MPU9250TaskParams.stack       = &MPU9250TaskStack;
-    MPU9250TaskParams.priority    = 3;
+    MPU9250TaskParams.stackSize	= STACKSIZE_MPU9250Task;
+    MPU9250TaskParams.stack		= &MPU9250TaskStack;
+    MPU9250TaskParams.priority	= 3;
 
     hMPU9250Task = Task_create(MPU9250Task, &MPU9250TaskParams, NULL);
     if (hMPU9250Task == NULL) {
-        System_abort("MPU9250Task create failed!");
+    	System_abort("MPU9250Task create failed!");
     }
 
-    // Communication Task initialization
+////	jtkj: Init Main Task
+//    Task_Params_init(&labTaskParams);
+//    labTaskParams.stackSize = STACKSIZE;
+//    labTaskParams.stack = &labTaskStack;
+//    labTaskParams.priority=2;
+//
+//    hLabTask = Task_create(labTask, &labTaskParams, NULL);
+//    if (hLabTask == NULL) {
+//    	System_abort("Task create failed!");
+//    }
+
+
+//	jtkj: Init Communication Task
+    Task_Params_init(&commTaskParams);
+    commTaskParams.stackSize	= STACKSIZE_commTask;
+    commTaskParams.stack		= &commTaskStack;
+    commTaskParams.priority		= 1;
+    Init6LoWPAN();
     hCommTask = Task_create(commTask, &commTaskParams, NULL);
     if (hCommTask == NULL) {
-        System_abort("Task create failed!");
+    	System_abort("Task create failed!");
     }
-    Task_Params_init(&commTaskParams);
-    commTaskParams.stackSize  = STACKSIZE_commTask;
-    commTaskParams.stack      = &commTaskStack;
-    commTaskParams.priority   = 1;
-
-    Init6LoWPAN();
 
     // jtkj: Send OK to console
     System_printf("Hello world!\n");
@@ -376,3 +409,4 @@ Int main(void) {
 
     return (0);
 }
+
