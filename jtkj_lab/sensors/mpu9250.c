@@ -504,6 +504,10 @@ void mpu9250_get_data(I2C_Handle *i2c, float *ax, float *ay, float *az, float *g
 
 	// JTKJ: HERE TURN THE MSB AND LSB INTO A SIGNED 16-BIT VALUE
 	// AND STORE IT INTO GIVEN VARIABLE data[7]
+	int i;
+	for (i = 0; i < 7; i++) {
+	    data[i] = (int16_t) rawData[2*i] << 8 | rawData[2*i+1];
+	}
 
 	/* Now we'll calculate the accleration value into actual g's */
 	*ax = (float)data[0]*aRes - accelBias[0];
