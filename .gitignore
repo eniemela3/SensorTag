@@ -2,11 +2,10 @@
 *.*
 
 # Paitsi seuraavat:
-!*.c
-!*.h
+!/jtkj_lab/sensors/*.c
+!/jtkj_lab/sensors/*.h
 !.gitignore
 !README.md
 !Suunnitelma.pdf
+!main.c
 
-# Mutta poista tämä c-tiedosto:
-CC2650STK.c
