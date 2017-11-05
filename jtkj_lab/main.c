@@ -38,7 +38,7 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 //Char labTaskStack[STACKSIZE];
 
 // State machine
-enum state { STARTUP=0, MENU, GAME };
+enum state { STARTUP=0, MENU, GAME, CALIBRATE };
 enum state myState;
 
 // MPU GLOBAL VARIABLES
@@ -110,15 +110,14 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0) );
-//    char msg[8] = "Tere";
-//    Send6LoWPAN(IEEE80154_SERVER_ADDR, msg, 8);
+    myState = CALIBRATE;
 }
 
 
 //jtkj: Communication Task
 Void commTask(UArg arg0, UArg arg1) {
-	while (myState == STARTUP) {
-		// prevent data receive during startup
+	while ((myState == STARTUP) || (myState == CALIBRATE)) {
+		// prevent data receive during startup or sensor calibration
 	}
     char payload[16];
     uint16_t SenderAddr;
@@ -130,15 +129,14 @@ Void commTask(UArg arg0, UArg arg1) {
 	}
 
     while (1) {
-    	// COMMUNICATION WHILE LOOP DOES NOT USE Task_sleep
-    	// (It has lower priority than main loop)
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
-            uint8_t rata[10];
-            sprintf(rata, "%d\n", payload[0]);
-            System_printf(rata);
+            uint8_t track[10];
+            sprintf(track, "%d\n", payload[0]);
+            System_printf(track);
             System_flush();
+            // no sleep due to lowest priority of all tasks
         }
     }
 }
@@ -221,8 +219,6 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 
 	mpu9250_setup(&i2cMPU);
 
-	unsigned short samplerate = 1000000;
-
 	if (myState == STARTUP) {
 		myState = MENU;
 	}
@@ -233,7 +229,15 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 
 	while (1) {
 		mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-//		Task_sleep(1000000 / samplerate);
+		if (myState == MENU) {
+		    // use data to move within menu
+		} else if (myState == GAME) {
+		    // use data to move ball
+		} else if (myState == CALIBRATE) {
+		    // Setting up MPU9250 again as it re-calibrates the gyro and accelerometer
+		    mpu9250_setup(&i2cMPU);
+		    Task_sleep(1000000 / Clock_tickPeriod);
+		}
 		Task_sleep(1000000 / Clock_tickPeriod);
 	}
 }
@@ -302,16 +306,45 @@ Void displayTask(UArg arg0, UArg arg1) {
 ////			sprintf(text, "%d", i);
 ////			Display_print0(hDisplay, i, i, text);
 //		}
-//		jtkj: Do not remove sleep-call from here!
+
+		if (myState == MENU) {
+		    // print out menu
+		} else if (myState == GAME) {
+		    // print out game screen
+		} else if (myState == CALIBRATE) {
+
+		    char line1[16], line2[16], line3[16], line4[16], line5[16];
+		    Display_clear(hDisplay);
+
+		    sprintf(line1, "Calibrating");
+		    sprintf(line2, "sensors");
+		    Display_print0(hDisplay, 1, 0, line1);
+		    Display_print0(hDisplay, 2, 0, line2);
+		    sprintf(line3, "Please lay");
+		    sprintf(line4, "device on");
+		    sprintf(line5, "a flat surface");
+		    Display_print0(hDisplay, 4, 0, line3);
+		    Display_print0(hDisplay, 5, 0, line4);
+		    Display_print0(hDisplay, 6, 0, line5);
+		    Task_sleep(2500000 / Clock_tickPeriod); // time for MPU9250 to calibrate
+
+		    Display_clear(hDisplay);
+		    sprintf(line1, "Calibration");
+		    sprintf(line2,  "complete");
+		    Display_print0(hDisplay, 2, 0, line1);
+		    Display_print0(hDisplay, 3, 0, line2);
+		    Task_sleep(1000000 / Clock_tickPeriod); // time for user to read message
+		    Display_clear(hDisplay);
+		    myState = MENU;
+		}
+		// Refreshing display every second
 		Task_sleep(1000000 / Clock_tickPeriod);
 	}
 }
 
 
-
-
 Int main(void) {
-//	Task variables
+    //	Task variables
 	Task_Handle hMPU9250Task;
 	Task_Params MPU9250TaskParams;
 	Task_Handle hdisplayTask;
@@ -321,11 +354,11 @@ Int main(void) {
 	Task_Handle hCommTask;
 	Task_Params commTaskParams;
 
-//	Initialize board
+	//	Initialize board
 	Board_initGeneral();
 	Board_initI2C();
 
-//	jtkj: Power Button
+	// Power Button
 	hPowerButton = PIN_open(&sPowerButton, cPowerButton);
 	if(!hPowerButton) {
 		System_abort("Error initializing power button shut pins\n");
@@ -334,7 +367,7 @@ Int main(void) {
 		System_abort("Error registering power button callback function");
 	}
 
-//	JTKJ: INITIALIZE BUTTON0 HERE
+    // INITIALIZE BUTTON0
 	hButton0 = PIN_open(&sButton0, cButton0);
 	if(!hButton0) {
 	    System_abort("Error initializing led button shut pins\n");
@@ -343,13 +376,13 @@ Int main(void) {
 	    System_abort("Error registering led button callback function");
 	}
 
-//	jtkj: Init Leds
+	// Init Leds
     hLed = PIN_open(&sLed, cLed);
     if(!hLed) {
         System_abort("Error initializing LED pin\n");
     }
 
-//	Init displayTask
+    // Init displayTask
     Task_Params_init(&displayTaskParams);
     displayTaskParams.stackSize = STACKSIZE_displayTask;
     displayTaskParams.stack		= &displayTaskStack;
@@ -389,7 +422,7 @@ Int main(void) {
 //    }
 
 
-//	jtkj: Init Communication Task
+    // Init communication task
     Task_Params_init(&commTaskParams);
     commTaskParams.stackSize	= STACKSIZE_commTask;
     commTaskParams.stack		= &commTaskStack;
@@ -400,11 +433,6 @@ Int main(void) {
     	System_abort("Task create failed!");
     }
 
-    // jtkj: Send OK to console
-    System_printf("Hello world!\n");
-    System_flush();
-
-    /* Start BIOS */
     BIOS_start();
 
     return (0);
