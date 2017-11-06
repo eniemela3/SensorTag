@@ -1,5 +1,5 @@
 # Ignoraa kaikki tiedostot
-*.*
+*
 
 # Paitsi seuraavat:
 !/jtkj_lab/sensors/*.c

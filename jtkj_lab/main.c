@@ -50,6 +50,7 @@ static PIN_Config MpuPinConfig[] = {
 };
 
 static float ax, ay, az, gx, gy, gz;
+static uint8_t trackBuffer[5];
 
 // MPU9250 uses its own I2C interface
 static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
@@ -113,6 +114,19 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     myState = CALIBRATE;
 }
 
+Void Int2Binary(uint8_t num, char *str) {
+    int len = strlen(str) - 1;
+    int i;
+    for (i = len; i >= 0; i--) {
+        if (num % 2 == 0) {
+            *(str + i) = "0";
+        }
+        else {
+            *(str + i) = "1";
+        }
+        num = num / 2;
+    }
+}
 
 //jtkj: Communication Task
 Void commTask(UArg arg0, UArg arg1) {
@@ -121,21 +135,31 @@ Void commTask(UArg arg0, UArg arg1) {
 	}
     char payload[16];
     uint16_t SenderAddr;
-
     // Radio to receive mode
 	int32_t result = StartReceive6LoWPAN();
 	if(result != true) {
 		System_abort("Wireless receive mode failed");
 	}
-
+	char track[9];
     while (1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
-            uint8_t track[10];
-            sprintf(track, "%d\n", payload[0]);
-            System_printf(track);
+            trackBuffer[4] = trackBuffer[3];
+            trackBuffer[3] = trackBuffer[2];
+            trackBuffer[2] = trackBuffer[1];
+            trackBuffer[1] = trackBuffer[0];
+            trackBuffer[0] = payload[0];
+            System_printf("%d\n", trackBuffer[0]);
+            System_printf("%d\n", trackBuffer[1]);
+            System_printf("%d\n", trackBuffer[2]);
+            System_printf("%d\n", trackBuffer[3]);
+            System_printf("%d\n", trackBuffer[4]);
             System_flush();
+
+            //Int2Binary(payload[0], &track);
+            //System_printf("%s\n", track);
+            //System_flush();
             // no sleep due to lowest priority of all tasks
         }
     }
@@ -226,6 +250,14 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		System_abort("Error: incorrect state\n");
 	}
 
+	// Variables for calibration
+	float maxCal = 0;
+	float minCal = 0;
+	// Defaults if calibration is never run:
+	float calLeft = -45;
+	float calRight = 45;
+	uint8_t calIndex = 0;
+	uint8_t calWait = 0; // boolean??
 
 	while (1) {
 		mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
@@ -234,11 +266,27 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		} else if (myState == GAME) {
 		    // use data to move ball
 		} else if (myState == CALIBRATE) {
-		    // Setting up MPU9250 again as it re-calibrates the gyro and accelerometer
-		    mpu9250_setup(&i2cMPU);
-		    Task_sleep(1000000 / Clock_tickPeriod);
+		    if (calWait == 0) {
+		        Task_sleep(500000 / Clock_tickPeriod);
+		        calWait = 1;
+		    }
+		    // Pick largest and smallest gy values for R & L thresholds
+		    if (maxCal < gy) {
+		        maxCal = gy;
+		    } else if (minCal > gy) {
+		        minCal = gy;
+		    }
+		    calIndex++;
+		    if (calIndex == 200) {
+		        myState = MENU;
+		        calLeft = minCal;
+		        calRight = maxCal;
+		        calWait = 0;
+		    }
+		    //System_printf("Still calibrating mpu\n");
+		    //System_printf("%d\n", calIndex);
 		}
-		Task_sleep(1000000 / Clock_tickPeriod);
+
 	}
 }
 
@@ -249,7 +297,7 @@ Void displayTask(UArg arg0, UArg arg1) {
 //	Init Display
 	Display_Params displayParams;
 	Display_Params_init(&displayParams);
-	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
+	displayParams.lineClearMode = DISPLAY_CLEAR_NONE;
 //		DISPLAY_CLEAR_NONE = 0,   !< Do not clear anything before writing
 //	    DISPLAY_CLEAR_LEFT,       !< Clear pixels to left of text on the line
 //	    DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
@@ -270,30 +318,30 @@ Void displayTask(UArg arg0, UArg arg1) {
 //		Display_clear(hDisplay);
 
 //	näytölle viivoilla X
-		tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
-		if (pContext) {
-
-			// Piirretään puskuriin kaksi linjaa näytön poikki x:n muotoon
-			GrLineDraw(pContext,0,0,96,96);
-			GrLineDraw(pContext,0,96,96,0);
-
-			// Piirto puskurista näytölle
-			GrFlush(pContext);
-		}
-
-		char text[17];
-		sprintf(text, "ax = %.3f", ax);
-		Display_print0(hDisplay, 0, 0, text);
-		sprintf(text, "ay = %.3f", ay);
-		Display_print0(hDisplay, 1, 0, text);
-		sprintf(text, "az = %.3f", az);
-		Display_print0(hDisplay, 2, 0, text);
-		sprintf(text, "gx = %.3f", gx);
-		Display_print0(hDisplay, 3, 0, text);
-		sprintf(text, "gy = %.3f", gy);
-		Display_print0(hDisplay, 4, 0, text);
-		sprintf(text, "gz = %.3f", gz);
-		Display_print0(hDisplay, 5, 0, text);
+//		tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
+//		if (pContext) {
+//
+//			// Piirretään puskuriin kaksi linjaa näytön poikki x:n muotoon
+//			GrLineDraw(pContext,0,0,96,96);
+//			GrLineDraw(pContext,0,96,96,0);
+//
+//			// Piirto puskurista näytölle
+//			GrFlush(pContext);
+//		}
+//
+//		char text[17];
+//		sprintf(text, "ax = %.3f", ax);
+//		Display_print0(hDisplay, 0, 0, text);
+//		sprintf(text, "ay = %.3f", ay);
+//		Display_print0(hDisplay, 1, 0, text);
+//		sprintf(text, "az = %.3f", az);
+//		Display_print0(hDisplay, 2, 0, text);
+//		sprintf(text, "gx = %.3f", gx);
+//		Display_print0(hDisplay, 3, 0, text);
+//		sprintf(text, "gy = %.3f", gy);
+//		Display_print0(hDisplay, 4, 0, text);
+//		sprintf(text, "gz = %.3f", gz);
+//		Display_print0(hDisplay, 5, 0, text);
 
 //		Display_print0(hDisplay, 11, 0, "0123456789ABCDEF");
 //		int i;
@@ -307,41 +355,49 @@ Void displayTask(UArg arg0, UArg arg1) {
 ////			Display_print0(hDisplay, i, i, text);
 //		}
 
-		if (myState == MENU) {
+//		if (myState == MENU) {
 		    // print out menu
-		} else if (myState == GAME) {
-		    // print out game screen
+		if (myState == GAME || myState == MENU) { // MENU temp
+		    int i;
+		    for (i=0; i < 5; i++) {
+		        if (trackBuffer[i] & 0b00001000) {
+		            Display_print0(hDisplay, i, 1, "O");
+		        } else {
+		            Display_print0(hDisplay, i, 1, "-");
+		        }
+		        if (trackBuffer[i] & 0b00010000) {
+                    Display_print0(hDisplay, i, 0, "O");
+		        } else {
+		            Display_print0(hDisplay, i, 0, "-");
+		        }
+		    }
+
 		} else if (myState == CALIBRATE) {
-
-		    char line1[16], line2[16], line3[16], line4[16], line5[16];
 		    Display_clear(hDisplay);
+		    char line1[16], line2[16];
 
-		    sprintf(line1, "Calibrating");
-		    sprintf(line2, "sensors");
+		    sprintf(line1, "CALIBRATING");
+		    sprintf(line2, "Tilt L & R");
+
 		    Display_print0(hDisplay, 1, 0, line1);
-		    Display_print0(hDisplay, 2, 0, line2);
-		    sprintf(line3, "Please lay");
-		    sprintf(line4, "device on");
-		    sprintf(line5, "a flat surface");
-		    Display_print0(hDisplay, 4, 0, line3);
-		    Display_print0(hDisplay, 5, 0, line4);
-		    Display_print0(hDisplay, 6, 0, line5);
-		    Task_sleep(2500000 / Clock_tickPeriod); // time for MPU9250 to calibrate
+		    Display_print0(hDisplay, 4, 0, line2);
 
+		    // Wait here until calibration is done:
+		    while (myState == CALIBRATE) {
+		        // Check state every 0.1 seconds
+		        System_printf("Still calibrating display\n");
+		        Task_sleep(100000 / Clock_tickPeriod);
+		    }
+		    sprintf(line2, "DONE");
+		    Display_print0(hDisplay, 6, 0, line2);
+		    Task_sleep(1000000 / Clock_tickPeriod);
 		    Display_clear(hDisplay);
-		    sprintf(line1, "Calibration");
-		    sprintf(line2,  "complete");
-		    Display_print0(hDisplay, 2, 0, line1);
-		    Display_print0(hDisplay, 3, 0, line2);
-		    Task_sleep(1000000 / Clock_tickPeriod); // time for user to read message
-		    Display_clear(hDisplay);
-		    myState = MENU;
+
 		}
 		// Refreshing display every second
 		Task_sleep(1000000 / Clock_tickPeriod);
 	}
 }
-
 
 Int main(void) {
     //	Task variables
@@ -386,7 +442,7 @@ Int main(void) {
     Task_Params_init(&displayTaskParams);
     displayTaskParams.stackSize = STACKSIZE_displayTask;
     displayTaskParams.stack		= &displayTaskStack;
-    displayTaskParams.priority	= 2;
+    displayTaskParams.priority	= 3;
 
     hdisplayTask = Task_create(displayTask, &displayTaskParams, NULL);
     if (hdisplayTask == NULL) {
@@ -403,7 +459,7 @@ Int main(void) {
     Task_Params_init(&MPU9250TaskParams);
     MPU9250TaskParams.stackSize	= STACKSIZE_MPU9250Task;
     MPU9250TaskParams.stack		= &MPU9250TaskStack;
-    MPU9250TaskParams.priority	= 3;
+    MPU9250TaskParams.priority	= 2;
 
     hMPU9250Task = Task_create(MPU9250Task, &MPU9250TaskParams, NULL);
     if (hMPU9250Task == NULL) {
