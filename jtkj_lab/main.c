@@ -115,19 +115,19 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     myState = CALIBRATE;
 }
 
-Void Int2Binary(uint8_t num, char *str) {
-    int len = strlen(str) - 1;
-    int i;
-    for (i = len; i >= 0; i--) {
-        if (num % 2 == 0) {
-            *(str + i) = "0";
-        }
-        else {
-            *(str + i) = "1";
-        }
-        num = num / 2;
-    }
-}
+//Void Int2Binary(uint8_t num, char *str) {
+//    int len = strlen(str) - 1;
+//    int i;
+//    for (i = len; i >= 0; i--) {
+//        if (num % 2 == 0) {
+//            *(str + i) = "0";
+//        }
+//        else {
+//            *(str + i) = "1";
+//        }
+//        num = num / 2;
+//    }
+//}
 
 //jtkj: Communication Task
 Void commTask(UArg arg0, UArg arg1) {
