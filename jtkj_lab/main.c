@@ -1,4 +1,3 @@
-// turha kommentti
 #include <stdio.h>
 /*
  *  ======== main.c ========
@@ -38,9 +37,20 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 
 //Char labTaskStack[STACKSIZE];
 
+// pixel graphics
+#define BALL_R 5
+#define OBSTACLE_W 12
+#define OBSTACLE_H 12
+#define TRACK_H 86
+#define TRACK_W 30
+
 // State machine
 enum state { STARTUP=0, MENU, GAME, CALIBRATE };
 enum state myState;
+
+// Object's position on the track
+enum trackPos { LEFT=0, RIGHT };
+enum trackPos BallPos;
 
 // MPU GLOBAL VARIABLES
 static PIN_Handle hMpuPin;
@@ -112,7 +122,20 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0) );
-    myState = CALIBRATE;
+    switch (myState) {
+    case MENU:
+    	myState = CALIBRATE;
+    	break;
+    case CALIBRATE:
+    	myState = GAME;
+    	break;
+    case GAME:
+    	myState = MENU;
+    	break;
+    default:
+    	myState = MENU;
+    	break;
+    }
 }
 
 //Void Int2Binary(uint8_t num, char *str) {
@@ -141,7 +164,7 @@ Void commTask(UArg arg0, UArg arg1) {
 	if(result != true) {
 		System_abort("Wireless receive mode failed");
 	}
-	char track[9];
+//	char track[9];
     while (1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
@@ -155,7 +178,7 @@ Void commTask(UArg arg0, UArg arg1) {
             System_printf("%d\n", trackBuffer[1]);
             System_printf("%d\n", trackBuffer[2]);
             System_printf("%d\n", trackBuffer[3]);
-            System_printf("%d\n", trackBuffer[4]);
+            System_printf("%d\n\n", trackBuffer[4]);
             System_flush();
 
             //Int2Binary(payload[0], &track);
@@ -222,7 +245,6 @@ Void commTask(UArg arg0, UArg arg1) {
 //}
 
 
-// ERIKA todo: MPU gyro + kiihtyvyys
 Void MPU9250Task(UArg arg0, UArg arg1) {
 //	I2C_Handle      i2c;
 //	I2C_Params      i2cParams;
@@ -279,7 +301,6 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		    }
 		    calIndex++;
 		    if (calIndex == 200) {
-		        myState = MENU;
 		        calLeft = minCal;
 		        calRight = maxCal;
 		        calWait = 0;
@@ -291,11 +312,8 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 	}
 }
 
-
-// ANTTI todo: pikseligrafiikka
 Void displayTask(UArg arg0, UArg arg1) {
-
-//	Init Display
+// 96 x 96 px	16 x 12 char (char = 5 x 7 px)
 	Display_Params displayParams;
 	Display_Params_init(&displayParams);
 	displayParams.lineClearMode = DISPLAY_CLEAR_NONE;
@@ -306,44 +324,14 @@ Void displayTask(UArg arg0, UArg arg1) {
 
 	hDisplay = Display_open(Display_Type_LCD, &displayParams);
 	if (hDisplay == NULL) {
-		System_abort("Error initializing Display\n");
+		System_abort("Error initializing Display (hDisplay)\n");
 	}
-
-////	jtkj: Check that Display works
-//	Display_clear(hDisplay);
-//	char str[3];
-//	sprintf(str, "%d", IEEE80154_MY_ADDR);
-//	Display_print0(hDisplay, 7, 7, str);
-
+	tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
+	if (pContext == NULL) {
+		System_abort("Error initializing Display (pContext)\n");
+	}
+	tRectangle ObstacleRect;
 	while (1) {
-//		Display_clear(hDisplay);
-
-//	näytölle viivoilla X
-//		tContext *pContext = DisplayExt_getGrlibContext(hDisplay);
-//		if (pContext) {
-//
-//			// Piirretään puskuriin kaksi linjaa näytön poikki x:n muotoon
-//			GrLineDraw(pContext,0,0,96,96);
-//			GrLineDraw(pContext,0,96,96,0);
-//
-//			// Piirto puskurista näytölle
-//			GrFlush(pContext);
-//		}
-//
-//		char text[17];
-//		sprintf(text, "ax = %.3f", ax);
-//		Display_print0(hDisplay, 0, 0, text);
-//		sprintf(text, "ay = %.3f", ay);
-//		Display_print0(hDisplay, 1, 0, text);
-//		sprintf(text, "az = %.3f", az);
-//		Display_print0(hDisplay, 2, 0, text);
-//		sprintf(text, "gx = %.3f", gx);
-//		Display_print0(hDisplay, 3, 0, text);
-//		sprintf(text, "gy = %.3f", gy);
-//		Display_print0(hDisplay, 4, 0, text);
-//		sprintf(text, "gz = %.3f", gz);
-//		Display_print0(hDisplay, 5, 0, text);
-
 //		Display_print0(hDisplay, 11, 0, "0123456789ABCDEF");
 //		int i;
 //		for(i = 0; i < 16; i++) {
@@ -355,25 +343,27 @@ Void displayTask(UArg arg0, UArg arg1) {
 ////			sprintf(text, "%d", i);
 ////			Display_print0(hDisplay, i, i, text);
 //		}
+		Display_clear(hDisplay);
+		while (myState == MENU) {
+			displayParams.lineClearMode = DISPLAY_CLEAR_RIGHT;
+			char text[17];
+			sprintf(text, "ax = %.3f", ax);
+			Display_print0(hDisplay, 0, 0, text);
+			sprintf(text, "ay = %.3f", ay);
+			Display_print0(hDisplay, 1, 0, text);
+			sprintf(text, "az = %.3f", az);
+			Display_print0(hDisplay, 2, 0, text);
+			sprintf(text, "gx = %.3f", gx);
+			Display_print0(hDisplay, 3, 0, text);
+			sprintf(text, "gy = %.3f", gy);
+			Display_print0(hDisplay, 4, 0, text);
+			sprintf(text, "gz = %.3f", gz);
+			Display_print0(hDisplay, 5, 0, text);
 
-//		if (myState == MENU) {
-		    // print out menu
-		if (myState == GAME || myState == MENU) { // MENU temp
-		    int i;
-		    for (i=0; i < 5; i++) {
-		        if (trackBuffer[i] & 0b00001000) {
-		            Display_print0(hDisplay, i, 1, "O");
-		        } else {
-		            Display_print0(hDisplay, i, 1, "-");
-		        }
-		        if (trackBuffer[i] & 0b00010000) {
-                    Display_print0(hDisplay, i, 0, "O");
-		        } else {
-		            Display_print0(hDisplay, i, 0, "-");
-		        }
-		    }
+			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+		}
 
-		} else if (myState == CALIBRATE) {
+		while (myState == CALIBRATE) {
 		    Display_clear(hDisplay);
 		    char line1[16], line2[16];
 
@@ -386,7 +376,7 @@ Void displayTask(UArg arg0, UArg arg1) {
 		    // Wait here until calibration is done:
 		    while (myState == CALIBRATE) {
 		        // Check state every 0.1 seconds
-		        System_printf("Still calibrating display\n");
+//		        System_printf("Still calibrating display\n");
 		        Task_sleep(100000 / Clock_tickPeriod);
 		    }
 		    sprintf(line2, "DONE");
@@ -394,9 +384,56 @@ Void displayTask(UArg arg0, UArg arg1) {
 		    Task_sleep(1000000 / Clock_tickPeriod);
 		    Display_clear(hDisplay);
 
+		    Task_sleep(1000000 / Clock_tickPeriod);
 		}
-		// Refreshing display every second
-		Task_sleep(1000000 / Clock_tickPeriod);
+
+		Display_clear(hDisplay);
+		while (myState == GAME) { // MENU temp
+			Display_print0(hDisplay, 11, 0, "VIESTIALUE :)");
+			GrLineDrawH(pContext,0,95,TRACK_H);
+			GrLineDraw(pContext, 46-TRACK_W/2, 0, 46-TRACK_W/2, TRACK_H);
+			GrLineDraw(pContext, 47+TRACK_W/2, 0, 47+TRACK_W/2, TRACK_H);
+			if (BallPos == LEFT) {
+				GrCircleFill(pContext, 46 - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, BALL_R);
+				GrCircleDraw(pContext, 47 + TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, BALL_R);
+			}
+			else {
+				GrCircleFill(pContext, 47 + TRACK_W/4, TRACK_H - BALL_R - 2, BALL_R);
+				GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H - BALL_R - 2, BALL_R);
+			}
+
+			ObstacleRect.sXMin = 47 + TRACK_W/4 - OBSTACLE_W/2;
+			ObstacleRect.sYMin = TRACK_H/12 + 4*TRACK_H/6 - OBSTACLE_W/2;
+			ObstacleRect.sXMax = 47 + TRACK_W/4 + OBSTACLE_W/2;
+			ObstacleRect.sYMax = TRACK_H/12 + 4*TRACK_H/6 + OBSTACLE_W/2;
+			GrRectDraw(pContext, &ObstacleRect);
+			ObstacleRect.sYMin = TRACK_H/12 + 3*TRACK_H/6 - OBSTACLE_W/2;
+			ObstacleRect.sYMax = TRACK_H/12 + 3*TRACK_H/6 + OBSTACLE_W/2;
+			GrRectFill(pContext, &ObstacleRect);
+
+			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 4*TRACK_H/6, BALL_R);
+			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 3*TRACK_H/6, BALL_R);
+			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 2*TRACK_H/6, BALL_R);
+			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 1*TRACK_H/6, BALL_R);
+			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 0*TRACK_H/6, BALL_R);
+
+			GrFlush(pContext);
+//		    int i;
+//		    for (i=0; i < 5; i++) {
+//		        if (trackBuffer[i] & 0b00001000) {
+//		            Display_print0(hDisplay, i, 1, "O");
+//		        } else {
+//		            Display_print0(hDisplay, i, 1, "-");
+//		        }
+//		        if (trackBuffer[i] & 0b00010000) {
+//                    Display_print0(hDisplay, i, 0, "O");
+//		        } else {
+//		            Display_print0(hDisplay, i, 0, "-");
+//		        }
+//		    }
+
+			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+		}
 	}
 }
 
