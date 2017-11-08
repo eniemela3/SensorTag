@@ -38,19 +38,32 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 //Char labTaskStack[STACKSIZE];
 
 // pixel graphics
-#define BALL_R 5
 #define OBSTACLE_W 12
 #define OBSTACLE_H 12
 #define TRACK_H 86
 #define TRACK_W 30
+#define MID_R_COORD 47
+#define MID_L_COORD 46
+#define BALL_R_FLYING 6
+#define BALL_R 4
+static uint8_t ball_r = BALL_R;
 
-// State machine
-enum state { STARTUP=0, MENU, GAME, CALIBRATE };
-enum state myState;
+// Main state machine
+enum mainState { STARTUP=0, MENU, GAME, CALIBRATE };
+enum mainState myState;
+
+// Flying state machine
+enum flyingState { CAN_FLY=0, FLYING, CANT_FLY };
+enum flyingState flyState;
 
 // Object's position on the track
 enum trackPos { LEFT=0, RIGHT };
 enum trackPos BallPos;
+
+// Defaults if calibration is never run:
+static float calLeft = -0.5;
+static float calRight = 0.5;
+static float calFly = -1.3;
 
 // MPU GLOBAL VARIABLES
 static PIN_Handle hMpuPin;
@@ -61,7 +74,7 @@ static PIN_Config MpuPinConfig[] = {
 };
 
 static float ax, ay, az, gx, gy, gz;
-static uint8_t trackBuffer[5];
+static uint8_t trackBuffer[6];
 
 // MPU9250 uses its own I2C interface
 static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
@@ -108,14 +121,14 @@ PIN_Config cLed[] = {
 /* jtkj: Handle power button */
 Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 
-    Display_clear(hDisplay);
-    Display_close(hDisplay);
-    Task_sleep(100000 / Clock_tickPeriod);
-
-	PIN_close(hPowerButton);
-
-    PINCC26XX_setWakeup(cPowerWake);
-	Power_shutdown(NULL,0);
+//    Display_clear(hDisplay);
+//    Display_close(hDisplay);
+//    Task_sleep(100000 / Clock_tickPeriod);
+//
+//	PIN_close(hPowerButton);
+//
+//    PINCC26XX_setWakeup(cPowerWake);
+//	Power_shutdown(NULL,0);
 }
 
 /* JTKJ: HERE YOUR HANDLER FOR BUTTON0 PRESS */
@@ -169,17 +182,18 @@ Void commTask(UArg arg0, UArg arg1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
+            trackBuffer[5] = trackBuffer[4];
             trackBuffer[4] = trackBuffer[3];
             trackBuffer[3] = trackBuffer[2];
             trackBuffer[2] = trackBuffer[1];
             trackBuffer[1] = trackBuffer[0];
             trackBuffer[0] = payload[0];
-            System_printf("%d\n", trackBuffer[0]);
-            System_printf("%d\n", trackBuffer[1]);
-            System_printf("%d\n", trackBuffer[2]);
-            System_printf("%d\n", trackBuffer[3]);
-            System_printf("%d\n\n", trackBuffer[4]);
-            System_flush();
+//            System_printf("%d\n", trackBuffer[0]);
+//            System_printf("%d\n", trackBuffer[1]);
+//            System_printf("%d\n", trackBuffer[2]);
+//            System_printf("%d\n", trackBuffer[3]);
+//            System_printf("%d\n\n", trackBuffer[4]);
+//            System_flush();
 
             //Int2Binary(payload[0], &track);
             //System_printf("%s\n", track);
@@ -274,36 +288,52 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 	}
 
 	// Variables for calibration
-	float maxCal = 0;
-	float minCal = 0;
-	// Defaults if calibration is never run:
-	float calLeft = -45;
-	float calRight = 45;
+	float maxX = 0;
+	float minX = 0;
+	float minZ = 0;
 	uint8_t calIndex = 0;
 	uint8_t calWait = 0; // boolean??
 
 	while (1) {
 		mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
 		if (myState == MENU) {
+	        calWait = 0;
 		    // use data to move within menu
 		} else if (myState == GAME) {
-		    // use data to move ball
+			if (ax < calLeft) {
+				BallPos = LEFT;
+			} else if (ax > calRight) {
+				BallPos = RIGHT;
+			}
+			if (az < calFly && flyState == CAN_FLY) {
+				flyState = FLYING;
+			}
 		} else if (myState == CALIBRATE) {
 		    if (calWait == 0) {
 		        Task_sleep(500000 / Clock_tickPeriod);
 		        calWait = 1;
+		        calLeft = 0;
+		        calRight = 0;
+		        calFly = 0;
+		        calIndex = 0;
+		        minX = 0;
+		        maxX = 0;
+		        minZ = 0;
 		    }
 		    // Pick largest and smallest gy values for R & L thresholds
-		    if (maxCal < gy) {
-		        maxCal = gy;
-		    } else if (minCal > gy) {
-		        minCal = gy;
+		    if (maxX < ax) {
+		        maxX = ax;
+		    } else if (minX > ax) {
+		        minX = ax;
+		    }
+		    if (minZ > az) {
+		    	minZ = az;
 		    }
 		    calIndex++;
 		    if (calIndex == 200) {
-		        calLeft = minCal;
-		        calRight = maxCal;
-		        calWait = 0;
+		        calLeft = minX;
+		        calRight = maxX;
+		        calFly = minZ;
 		    }
 		    //System_printf("Still calibrating mpu\n");
 		    //System_printf("%d\n", calIndex);
@@ -377,6 +407,11 @@ Void displayTask(UArg arg0, UArg arg1) {
 		    while (myState == CALIBRATE) {
 		        // Check state every 0.1 seconds
 //		        System_printf("Still calibrating display\n");
+		    	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
+		    	sprintf(line1, "R = %.1f", calRight);
+		    	Display_print0(hDisplay, 8, 0, line1);
+		    	sprintf(line1, "L = %.1f", calLeft);
+		    	Display_print0(hDisplay, 9, 0, line1);
 		        Task_sleep(100000 / Clock_tickPeriod);
 		    }
 		    sprintf(line2, "DONE");
@@ -389,35 +424,98 @@ Void displayTask(UArg arg0, UArg arg1) {
 
 		Display_clear(hDisplay);
 		while (myState == GAME) { // MENU temp
+			Display_clear(hDisplay);
+
 			Display_print0(hDisplay, 11, 0, "VIESTIALUE :)");
 			GrLineDrawH(pContext,0,95,TRACK_H);
-			GrLineDraw(pContext, 46-TRACK_W/2, 0, 46-TRACK_W/2, TRACK_H);
-			GrLineDraw(pContext, 47+TRACK_W/2, 0, 47+TRACK_W/2, TRACK_H);
+			GrLineDraw(pContext, MID_L_COORD-TRACK_W/2, 0, MID_L_COORD-TRACK_W/2, TRACK_H);
+			GrLineDraw(pContext, MID_R_COORD+TRACK_W/2, 0, MID_R_COORD+TRACK_W/2, TRACK_H);
+
+			if (flyState == FLYING) {
+				ball_r = BALL_R_FLYING;
+				flyState = CANT_FLY;
+			} else if (flyState == CANT_FLY) {
+				ball_r = BALL_R;
+				flyState = CAN_FLY;
+			}
+
 			if (BallPos == LEFT) {
-				GrCircleFill(pContext, 46 - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, BALL_R);
-				GrCircleDraw(pContext, 47 + TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, BALL_R);
-			}
-			else {
-				GrCircleFill(pContext, 47 + TRACK_W/4, TRACK_H - BALL_R - 2, BALL_R);
-				GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H - BALL_R - 2, BALL_R);
+				GrCircleFill(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
+			} else {
+				GrCircleFill(pContext, MID_R_COORD + TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
 			}
 
-			ObstacleRect.sXMin = 47 + TRACK_W/4 - OBSTACLE_W/2;
-			ObstacleRect.sYMin = TRACK_H/12 + 4*TRACK_H/6 - OBSTACLE_W/2;
-			ObstacleRect.sXMax = 47 + TRACK_W/4 + OBSTACLE_W/2;
-			ObstacleRect.sYMax = TRACK_H/12 + 4*TRACK_H/6 + OBSTACLE_W/2;
-			GrRectDraw(pContext, &ObstacleRect);
-			ObstacleRect.sYMin = TRACK_H/12 + 3*TRACK_H/6 - OBSTACLE_W/2;
-			ObstacleRect.sYMax = TRACK_H/12 + 3*TRACK_H/6 + OBSTACLE_W/2;
-			GrRectFill(pContext, &ObstacleRect);
-
-			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 4*TRACK_H/6, BALL_R);
-			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 3*TRACK_H/6, BALL_R);
-			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 2*TRACK_H/6, BALL_R);
-			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 1*TRACK_H/6, BALL_R);
-			GrCircleDraw(pContext, 46 - TRACK_W/4, TRACK_H/12 + 0*TRACK_H/6, BALL_R);
+//			ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
+//			ObstacleRect.sYMin = TRACK_H/12 + 4*TRACK_H/6 - OBSTACLE_W/2;
+//			ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
+//			ObstacleRect.sYMax = TRACK_H/12 + 4*TRACK_H/6 + OBSTACLE_W/2;
+//			GrRectDraw(pContext, &ObstacleRect);
+//			ObstacleRect.sYMin = TRACK_H/12 + 3*TRACK_H/6 - OBSTACLE_W/2;
+//			ObstacleRect.sYMax = TRACK_H/12 + 3*TRACK_H/6 + OBSTACLE_W/2;
+//			GrRectFill(pContext, &ObstacleRect);
+//
+//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 4*TRACK_H/6, ball_r);
+//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 3*TRACK_H/6, ball_r);
+//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 2*TRACK_H/6, ball_r);
+//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 1*TRACK_H/6, ball_r);
+//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 0*TRACK_H/6, ball_r);
 
 			GrFlush(pContext);
+			int i;
+			for (i=0; i < 6; i++) {
+				ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
+				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+				ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
+				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+				if (trackBuffer[i] & 0b00001000) {
+					GrRectFill(pContext, &ObstacleRect);
+				}
+//				else {
+//					clear position
+//				}
+
+				if (trackBuffer[i] & 0b00000100) {
+					GrRectDraw(pContext, &ObstacleRect);
+				}
+//				else {
+//					clear position
+//				}
+				ObstacleRect.sXMin = MID_L_COORD - TRACK_W/4 - OBSTACLE_W/2;
+				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+				ObstacleRect.sXMax = MID_L_COORD - TRACK_W/4 + OBSTACLE_W/2;
+				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+				if (trackBuffer[i] & 0b00010000) {
+					GrRectFill(pContext, &ObstacleRect);
+				}
+//				else {
+//					clear position
+//				}
+				if (trackBuffer[i] & 0b00100000) {
+					GrRectDraw(pContext, &ObstacleRect);
+				}
+				ObstacleRect.sXMin = MID_R_COORD + 3*TRACK_W/4 - OBSTACLE_W/2;
+				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+				ObstacleRect.sXMax = MID_R_COORD + 3*TRACK_W/4 + OBSTACLE_W/2;
+				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+				if (trackBuffer[i] & 0b00000010) {
+					GrRectDraw(pContext, &ObstacleRect);
+				}
+				//				else {
+					//					clear position
+				//				}
+				ObstacleRect.sXMin = MID_L_COORD - 3*TRACK_W/4 - OBSTACLE_W/2;
+				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+				ObstacleRect.sXMax = MID_L_COORD - 3*TRACK_W/4 + OBSTACLE_W/2;
+				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+				if (trackBuffer[i] & 0b01000000) {
+					GrRectDraw(pContext, &ObstacleRect);
+				}
+				//				else {
+					//					clear position
+				//				}
+			}
+			GrFlush(pContext);
+
 //		    int i;
 //		    for (i=0; i < 5; i++) {
 //		        if (trackBuffer[i] & 0b00001000) {
