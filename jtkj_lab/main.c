@@ -25,7 +25,6 @@
 #include "sensors/bmp280.h"
 #include "sensors/mpu9250.h"
 
-// Note: if you edit STACKSIZEs, remember to edit them in main too
 #define STACKSIZE_commTask 2048
 Char commTaskStack[STACKSIZE_commTask];
 
@@ -35,7 +34,8 @@ Char displayTaskStack[STACKSIZE_displayTask];
 #define STACKSIZE_MPU9250Task 4096
 Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 
-//Char labTaskStack[STACKSIZE];
+//#define STACKSIZE_checkTask 1024
+//Char checkTaskStack[STACKSIZE_checkTask];
 
 // pixel graphics
 #define OBSTACLE_W 12
@@ -47,6 +47,32 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 #define BALL_R_FLYING 6
 #define BALL_R 4
 static uint8_t ball_r = BALL_R;
+static flyCounter = 0;
+
+// xy-coordinate on the display
+struct point {
+   uint8_t x; // x = [0, 95]
+   uint8_t y; // y = [0, 95]
+};
+
+// Coordinates for drawing rectangle
+struct rect {
+   struct point max;
+   struct point min;
+} displayRect;
+
+// Coordinates for drawing obstacles and ball
+struct trackCoordinates {
+    struct point ballR;
+    struct point ballL;
+    struct rect obstR[6];
+    struct rect obstL[6];
+    struct rect obstRR[6];
+    struct rect obstLL[6];
+    uint8_t trackMaxX;
+    uint8_t trackMinX;
+    uint8_t trackMaxY;
+};
 
 // Main state machine
 enum mainState { STARTUP=0, MENU, GAME, CALIBRATE };
@@ -60,10 +86,14 @@ enum flyingState flyState;
 enum trackPos { LEFT=0, RIGHT };
 enum trackPos BallPos;
 
-// Defaults if calibration is never run:
+// Obstacle's type and position on track
+enum obstacle {RIGHTSIDE_MOVING=2, RIGHTLANE_MOVING=4, RIGHTLANE_STATIC=8, LEFTLANE_STATIC=16, LEFTLANE_MOVING=32, LEFTSIDE_MOVING=64};
+enum obstacle obstaclePos;
+
+// Default acceleration thresholds if calibration is never run:
 static float calLeft = -0.5;
 static float calRight = 0.5;
-static float calFly = -1.3;
+static float calFly = -1.5;
 
 // MPU GLOBAL VARIABLES
 static PIN_Handle hMpuPin;
@@ -118,7 +148,7 @@ PIN_Config cLed[] = {
     PIN_TERMINATE
 };
 
-/* jtkj: Handle power button */
+// Power (bottom) button press handler
 Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 
 //    Display_clear(hDisplay);
@@ -131,8 +161,7 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 //	Power_shutdown(NULL,0);
 }
 
-/* JTKJ: HERE YOUR HANDLER FOR BUTTON0 PRESS */
-
+// Top button press handler
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0) );
     switch (myState) {
@@ -151,21 +180,7 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
     }
 }
 
-//Void Int2Binary(uint8_t num, char *str) {
-//    int len = strlen(str) - 1;
-//    int i;
-//    for (i = len; i >= 0; i--) {
-//        if (num % 2 == 0) {
-//            *(str + i) = "0";
-//        }
-//        else {
-//            *(str + i) = "1";
-//        }
-//        num = num / 2;
-//    }
-//}
-
-//jtkj: Communication Task
+// Communication Task
 Void commTask(UArg arg0, UArg arg1) {
 	while ((myState == STARTUP) || (myState == CALIBRATE)) {
 		// prevent data receive during startup or sensor calibration
@@ -177,7 +192,7 @@ Void commTask(UArg arg0, UArg arg1) {
 	if(result != true) {
 		System_abort("Wireless receive mode failed");
 	}
-//	char track[9];
+
     while (1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
@@ -188,76 +203,35 @@ Void commTask(UArg arg0, UArg arg1) {
             trackBuffer[2] = trackBuffer[1];
             trackBuffer[1] = trackBuffer[0];
             trackBuffer[0] = payload[0];
-//            System_printf("%d\n", trackBuffer[0]);
-//            System_printf("%d\n", trackBuffer[1]);
-//            System_printf("%d\n", trackBuffer[2]);
-//            System_printf("%d\n", trackBuffer[3]);
-//            System_printf("%d\n\n", trackBuffer[4]);
-//            System_flush();
-
-            //Int2Binary(payload[0], &track);
-            //System_printf("%s\n", track);
-            //System_flush();
-            // no sleep due to lowest priority of all tasks
         }
     }
 }
 
-////JTKJ: laboratory exercise task
-//Void labTask(UArg arg0, UArg arg1) {
-//
-//	I2C_Handle      i2c;
-//	I2C_Params      i2cParams;
-//
-////	jtkj: Create I2C for usage
-//	I2C_Params_init(&i2cParams);
-//	i2cParams.bitRate = I2C_400kHz;
-//	i2c = I2C_open(Board_I2C0, &i2cParams);
-//	if (i2c == NULL) {
-//		System_abort("Error Initializing I2C\n");
-//	}
-//
-////	JTKJ: SETUP BMP280 SENSOR HERE
-//	bmp280_setup(&i2c);
-//
-////	jtkj: Init Display
-//	Display_Params displayParams;
-//	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
-//	Display_Params_init(&displayParams);
-//
-//	hDisplay = Display_open(Display_Type_LCD, &displayParams);
-//	if (hDisplay == NULL) {
-//		System_abort("Error initializing Display\n");
-//	}
-//
-////	jtkj: Check that Display works
-//	Display_clear(hDisplay);
-//	char str[3];
-//	sprintf(str, "%d", IEEE80154_MY_ADDR);
-//	Display_print0(hDisplay, 7, 7, str);
-//
-//	double pres;
-//	double temp;
-//	char t[16];
-//	char p[16];
-////	jtkj: main loop
-//	while (1) {
-////		JTKJ: READ SENSOR DATA
-//		bmp280_get_data(&i2c, &pres, &temp);
-//
-//		pres /= 100;
-//
-//		sprintf(p, "%.3f hPa", pres);
-//		sprintf(t, "%.3f F", temp);
-//		Display_clear(hDisplay);
-//		Display_print0(hDisplay, 0, 0, p);
-//		Display_print0(hDisplay, 1, 0, t);
-//
-////		jtkj: Do not remove sleep-call from here!
-//		Task_sleep(1000000 / Clock_tickPeriod);
-//	}
-//}
+Void moveBall() {
+    // Moves ball left / right / up
+    if (ax < calLeft) {
+        BallPos = LEFT;
+    } else if (ax > calRight) {
+        BallPos = RIGHT;
+    }
+    if (az < calFly && flyState == CAN_FLY) {
+        flyState = FLYING;
+    }
+}
 
+//Void checkTask(UArg arg0, UArg arg1) {
+//    // Checks whether the ball and an obstacle are in the same position
+////    uint8_t bottomLine = trackBuffer[5];
+////
+////    uint8_t bitMaskLeft = 0b00110000;
+////    uint8_t bitMaskRight = 0b00001100;
+////    if ((bottomline & bitMaskLeft) && (BallPos))
+//
+//    while (1) {
+////        if (flyState == FLYING) {////            ball_r = BALL_R_FLYING;////            flyState = CANT_FLY;////        } else if (flyState == CANT_FLY) {////            ball_r = BALL_R;////            flyState = CAN_FLY;
+////        }//        Task_sleep(100000 / Clock_tickPeriod);
+//    }
+//}
 
 Void MPU9250Task(UArg arg0, UArg arg1) {
 //	I2C_Handle      i2c;
@@ -287,29 +261,23 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		System_abort("Error: incorrect state\n");
 	}
 
-	// Variables for calibration
-	float maxX = 0;
-	float minX = 0;
-	float minZ = 0;
+	// Creating calWait variable to ensure calibration task waits for sensor setup
+	uint8_t calWait = 0; // how to make a boolean??
 	uint8_t calIndex = 0;
-	uint8_t calWait = 0; // boolean??
-
+    float maxX = 0;
+    float minX = 0;
+    float minZ = 0;
 	while (1) {
 		mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
 		if (myState == MENU) {
 	        calWait = 0;
 		    // use data to move within menu
 		} else if (myState == GAME) {
-			if (ax < calLeft) {
-				BallPos = LEFT;
-			} else if (ax > calRight) {
-				BallPos = RIGHT;
-			}
-			if (az < calFly && flyState == CAN_FLY) {
-				flyState = FLYING;
-			}
+			moveBall();
+			Task_sleep(10000 / Clock_tickPeriod);
 		} else if (myState == CALIBRATE) {
 		    if (calWait == 0) {
+		        // Waiting for display task to print instructions to the user
 		        Task_sleep(500000 / Clock_tickPeriod);
 		        calWait = 1;
 		        calLeft = 0;
@@ -320,14 +288,14 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		        maxX = 0;
 		        minZ = 0;
 		    }
-		    // Pick largest and smallest gy values for R & L thresholds
+		    // Pick largest and smallest ax & smallest az value for R, L & Fly (up) thresholds
 		    if (maxX < ax) {
 		        maxX = ax;
 		    } else if (minX > ax) {
 		        minX = ax;
 		    }
 		    if (minZ > az) {
-		    	minZ = az;
+		        minZ = az;
 		    }
 		    calIndex++;
 		    if (calIndex == 200) {
@@ -335,11 +303,123 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 		        calRight = maxX;
 		        calFly = minZ;
 		    }
-		    //System_printf("Still calibrating mpu\n");
-		    //System_printf("%d\n", calIndex);
 		}
-
 	}
+}
+
+Void drawTrack(tContext *pContext) {
+    Display_clear(hDisplay);
+    Display_print0(hDisplay, 11, 0, "MSG: ");
+    GrLineDrawH(pContext,0,95,TRACK_H);
+    GrLineDraw(pContext, MID_L_COORD-TRACK_W/2, 0, MID_L_COORD-TRACK_W/2, TRACK_H);
+    GrLineDraw(pContext, MID_R_COORD+TRACK_W/2, 0, MID_R_COORD+TRACK_W/2, TRACK_H);
+}
+
+Void drawObstacles(tContext *pContext, tRectangle ObstacleRect) {
+    int i;
+    for (i=0; i < 6; i++) {
+        // Covering 5 seconds worth of trackBuffer
+        ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+        ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+
+        if (trackBuffer[i] & LEFTSIDE_MOVING) {
+            // Moving obstacle on left side of track
+            ObstacleRect.sXMin = MID_L_COORD - 3*TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_L_COORD - 3*TRACK_W/4 + OBSTACLE_W/2;
+            GrRectDraw(pContext, &ObstacleRect);
+        }
+        if (trackBuffer[i] & LEFTLANE_MOVING) {
+            // Moving obstacle in left lane
+            ObstacleRect.sXMin = MID_L_COORD - TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_L_COORD - TRACK_W/4 + OBSTACLE_W/2;
+            GrRectDraw(pContext, &ObstacleRect);
+        }
+        if (trackBuffer[i] & LEFTLANE_STATIC) {
+            // Static obstacle in left lane
+            ObstacleRect.sXMin = MID_L_COORD - TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_L_COORD - TRACK_W/4 + OBSTACLE_W/2;
+            GrRectFill(pContext, &ObstacleRect);
+        }
+        if (trackBuffer[i] & RIGHTLANE_STATIC) {
+            // Static obstacle in right lane
+            ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
+            GrRectFill(pContext, &ObstacleRect);
+        }
+        if (trackBuffer[i] & RIGHTLANE_MOVING) {
+            // Moving obstacle in right lane
+            ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
+            GrRectDraw(pContext, &ObstacleRect);
+        }
+        if (trackBuffer[i] & RIGHTSIDE_MOVING) {
+            // MOving obstacle on right side of track
+            ObstacleRect.sXMin = MID_R_COORD + 3*TRACK_W/4 - OBSTACLE_W/2;
+            ObstacleRect.sXMax = MID_R_COORD + 3*TRACK_W/4 + OBSTACLE_W/2;
+            GrRectDraw(pContext, &ObstacleRect);
+        }
+    }
+}
+
+Void drawBall(tContext *pContext) {
+    if (flyState == FLYING) {
+        ball_r = BALL_R_FLYING;
+        flyState = CANT_FLY;
+    } else if (flyState == CANT_FLY) {
+        ball_r = BALL_R;
+        flyState = CAN_FLY;
+    }
+    if (BallPos == LEFT) {
+        GrCircleFill(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
+    } else {
+        GrCircleFill(pContext, MID_R_COORD + TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
+    }
+}
+
+Void showMenu(Display_Params displayParams) {
+    displayParams.lineClearMode = DISPLAY_CLEAR_RIGHT;
+    char text[17];
+    sprintf(text, "ax = %.3f", ax);
+    Display_print0(hDisplay, 0, 0, text);
+    sprintf(text, "ay = %.3f", ay);
+    Display_print0(hDisplay, 1, 0, text);
+    sprintf(text, "az = %.3f", az);
+    Display_print0(hDisplay, 2, 0, text);
+    sprintf(text, "gx = %.3f", gx);
+    Display_print0(hDisplay, 3, 0, text);
+    sprintf(text, "gy = %.3f", gy);
+    Display_print0(hDisplay, 4, 0, text);
+    sprintf(text, "gz = %.3f", gz);
+    Display_print0(hDisplay, 5, 0, text);
+
+}
+
+Void showCalibration(Display_Params displayParams) {
+    Display_clear(hDisplay);
+    char line1[16], line2[16];
+
+    sprintf(line1, "CALIBRATING");
+    sprintf(line2, "Tilt L & R");
+    Display_print0(hDisplay, 1, 0, line1);
+    Display_print0(hDisplay, 4, 0, line2);
+
+    // Wait here until calibration is done:
+    while (myState == CALIBRATE) {
+        // Check state every 0.1 seconds
+        // System_printf("Still calibrating display\n");
+        Task_sleep(100000 / Clock_tickPeriod);
+    }
+    displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
+    sprintf(line1, "R = %.1f", calRight);
+    Display_print0(hDisplay, 8, 0, line1);
+    sprintf(line1, "L = %.1f", calLeft);
+    Display_print0(hDisplay, 9, 0, line1);
+    sprintf(line2, "DONE");
+    Display_print0(hDisplay, 6, 0, line2);
+    Task_sleep(1000000 / Clock_tickPeriod);
+    Display_clear(hDisplay);
+
+    Task_sleep(1000000 / Clock_tickPeriod);
 }
 
 Void displayTask(UArg arg0, UArg arg1) {
@@ -360,215 +440,101 @@ Void displayTask(UArg arg0, UArg arg1) {
 	if (pContext == NULL) {
 		System_abort("Error initializing Display (pContext)\n");
 	}
+
+	// Define graphics positions
+	/*    struct trackCoordinates trackCoord;
+	    trackCoord.trackMinX = MID_L_COORD-TRACK_W/2;
+	    trackCoord.trackMaxX = MID_R_COORD+TRACK_W/2;
+	    trackCoord.trackMaxY = TRACK_H;
+	    trackCoord.ballR.x = MID_L_COORD - TRACK_W/4;
+	    trackCoord.ballR.y = TRACK_H/12 + 5*TRACK_H/6;
+	    trackCoord.ballL.x = MID_R_COORD + TRACK_W/4;
+	    trackCoord.ballL.y = TRACK_H/12 + 5*TRACK_H/6;
+	    uint8_t i;
+	    for (i=0; i < 6; i++) {
+	        trackCoord.obstR[i].min.x = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
+	        trackCoord.obstR[i].min.y = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+	        trackCoord.obstR[i].max.x = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
+	        trackCoord.obstR[i].max.y = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+
+	        trackCoord.obstL[i].min.x = MID_L_COORD - TRACK_W/4 - OBSTACLE_W/2;
+	        trackCoord.obstL[i].min.y = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+	        trackCoord.obstL[i].max.x = MID_L_COORD - TRACK_W/4 + OBSTACLE_W/2;
+	        trackCoord.obstL[i].max.y = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+
+	        trackCoord.obstRR[i].min.x = MID_R_COORD + 3*TRACK_W/4 - OBSTACLE_W/2;
+	        trackCoord.obstRR[i].min.y = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+	        trackCoord.obstRR[i].max.x = MID_R_COORD + 3*TRACK_W/4 + OBSTACLE_W/2;
+	        trackCoord.obstRR[i].max.y = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+
+	        trackCoord.obstLL[i].min.x = MID_L_COORD - 3*TRACK_W/4 - OBSTACLE_W/2;
+	        trackCoord.obstLL[i].min.y = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
+	        trackCoord.obstLL[i].max.x = MID_L_COORD - 3*TRACK_W/4 + OBSTACLE_W/2;
+	        trackCoord.obstLL[i].max.y = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
+	    }
+	    displayRect.min.x = 0;
+	    displayRect.min.y = 0;
+	    displayRect.max.x = GrContextDpyWidthGet(pContext) - 1;
+	    displayRect.max.y = GrContextDpyHeightGet(pContext) - 1;
+*/
+
 	tRectangle ObstacleRect;
+
 	while (1) {
-//		Display_print0(hDisplay, 11, 0, "0123456789ABCDEF");
-//		int i;
-//		for(i = 0; i < 16; i++) {
-//			if(i>=11)
-//				Display_print0(hDisplay, 11, i, "O");
-//			else
-//				Display_print0(hDisplay, i, i, "O");
-////			char text[3];
-////			sprintf(text, "%d", i);
-////			Display_print0(hDisplay, i, i, text);
-//		}
 		Display_clear(hDisplay);
 		while (myState == MENU) {
-			displayParams.lineClearMode = DISPLAY_CLEAR_RIGHT;
-			char text[17];
-			sprintf(text, "ax = %.3f", ax);
-			Display_print0(hDisplay, 0, 0, text);
-			sprintf(text, "ay = %.3f", ay);
-			Display_print0(hDisplay, 1, 0, text);
-			sprintf(text, "az = %.3f", az);
-			Display_print0(hDisplay, 2, 0, text);
-			sprintf(text, "gx = %.3f", gx);
-			Display_print0(hDisplay, 3, 0, text);
-			sprintf(text, "gy = %.3f", gy);
-			Display_print0(hDisplay, 4, 0, text);
-			sprintf(text, "gz = %.3f", gz);
-			Display_print0(hDisplay, 5, 0, text);
-
-			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+			showMenu(displayParams);
+			Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
 		}
-
 		while (myState == CALIBRATE) {
-		    Display_clear(hDisplay);
-		    char line1[16], line2[16];
-
-		    sprintf(line1, "CALIBRATING");
-		    sprintf(line2, "Tilt L & R");
-
-		    Display_print0(hDisplay, 1, 0, line1);
-		    Display_print0(hDisplay, 4, 0, line2);
-
-		    // Wait here until calibration is done:
-		    while (myState == CALIBRATE) {
-		        // Check state every 0.1 seconds
-//		        System_printf("Still calibrating display\n");
-		    	displayParams.lineClearMode = DISPLAY_CLEAR_BOTH;
-		    	sprintf(line1, "R = %.1f", calRight);
-		    	Display_print0(hDisplay, 8, 0, line1);
-		    	sprintf(line1, "L = %.1f", calLeft);
-		    	Display_print0(hDisplay, 9, 0, line1);
-		        Task_sleep(100000 / Clock_tickPeriod);
-		    }
-		    sprintf(line2, "DONE");
-		    Display_print0(hDisplay, 6, 0, line2);
-		    Task_sleep(1000000 / Clock_tickPeriod);
-		    Display_clear(hDisplay);
-
-		    Task_sleep(1000000 / Clock_tickPeriod);
+		    showCalibration(displayParams);
+		    // Task_sleeps built into showCalibration
 		}
-
-		Display_clear(hDisplay);
-		while (myState == GAME) { // MENU temp
-			Display_clear(hDisplay);
-
-			Display_print0(hDisplay, 11, 0, "VIESTIALUE :)");
-			GrLineDrawH(pContext,0,95,TRACK_H);
-			GrLineDraw(pContext, MID_L_COORD-TRACK_W/2, 0, MID_L_COORD-TRACK_W/2, TRACK_H);
-			GrLineDraw(pContext, MID_R_COORD+TRACK_W/2, 0, MID_R_COORD+TRACK_W/2, TRACK_H);
-
-			if (flyState == FLYING) {
-				ball_r = BALL_R_FLYING;
-				flyState = CANT_FLY;
-			} else if (flyState == CANT_FLY) {
-				ball_r = BALL_R;
-				flyState = CAN_FLY;
-			}
-
-			if (BallPos == LEFT) {
-				GrCircleFill(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
-			} else {
-				GrCircleFill(pContext, MID_R_COORD + TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
-			}
-
-//			ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
-//			ObstacleRect.sYMin = TRACK_H/12 + 4*TRACK_H/6 - OBSTACLE_W/2;
-//			ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
-//			ObstacleRect.sYMax = TRACK_H/12 + 4*TRACK_H/6 + OBSTACLE_W/2;
-//			GrRectDraw(pContext, &ObstacleRect);
-//			ObstacleRect.sYMin = TRACK_H/12 + 3*TRACK_H/6 - OBSTACLE_W/2;
-//			ObstacleRect.sYMax = TRACK_H/12 + 3*TRACK_H/6 + OBSTACLE_W/2;
-//			GrRectFill(pContext, &ObstacleRect);
-//
-//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 4*TRACK_H/6, ball_r);
-//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 3*TRACK_H/6, ball_r);
-//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 2*TRACK_H/6, ball_r);
-//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 1*TRACK_H/6, ball_r);
-//			GrCircleDraw(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 0*TRACK_H/6, ball_r);
+		while (myState == GAME) {
+			drawTrack(pContext);
+			drawBall(pContext);
+			drawObstacles(pContext, ObstacleRect);
 
 			GrFlush(pContext);
-			int i;
-			for (i=0; i < 6; i++) {
-				ObstacleRect.sXMin = MID_R_COORD + TRACK_W/4 - OBSTACLE_W/2;
-				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
-				ObstacleRect.sXMax = MID_R_COORD + TRACK_W/4 + OBSTACLE_W/2;
-				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
-				if (trackBuffer[i] & 0b00001000) {
-					GrRectFill(pContext, &ObstacleRect);
-				}
-//				else {
-//					clear position
-//				}
-
-				if (trackBuffer[i] & 0b00000100) {
-					GrRectDraw(pContext, &ObstacleRect);
-				}
-//				else {
-//					clear position
-//				}
-				ObstacleRect.sXMin = MID_L_COORD - TRACK_W/4 - OBSTACLE_W/2;
-				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
-				ObstacleRect.sXMax = MID_L_COORD - TRACK_W/4 + OBSTACLE_W/2;
-				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
-				if (trackBuffer[i] & 0b00010000) {
-					GrRectFill(pContext, &ObstacleRect);
-				}
-//				else {
-//					clear position
-//				}
-				if (trackBuffer[i] & 0b00100000) {
-					GrRectDraw(pContext, &ObstacleRect);
-				}
-				ObstacleRect.sXMin = MID_R_COORD + 3*TRACK_W/4 - OBSTACLE_W/2;
-				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
-				ObstacleRect.sXMax = MID_R_COORD + 3*TRACK_W/4 + OBSTACLE_W/2;
-				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
-				if (trackBuffer[i] & 0b00000010) {
-					GrRectDraw(pContext, &ObstacleRect);
-				}
-				//				else {
-					//					clear position
-				//				}
-				ObstacleRect.sXMin = MID_L_COORD - 3*TRACK_W/4 - OBSTACLE_W/2;
-				ObstacleRect.sYMin = TRACK_H/12 + i*TRACK_H/6 - OBSTACLE_W/2;
-				ObstacleRect.sXMax = MID_L_COORD - 3*TRACK_W/4 + OBSTACLE_W/2;
-				ObstacleRect.sYMax = TRACK_H/12 + i*TRACK_H/6 + OBSTACLE_W/2;
-				if (trackBuffer[i] & 0b01000000) {
-					GrRectDraw(pContext, &ObstacleRect);
-				}
-				//				else {
-					//					clear position
-				//				}
-			}
-			GrFlush(pContext);
-
-//		    int i;
-//		    for (i=0; i < 5; i++) {
-//		        if (trackBuffer[i] & 0b00001000) {
-//		            Display_print0(hDisplay, i, 1, "O");
-//		        } else {
-//		            Display_print0(hDisplay, i, 1, "-");
-//		        }
-//		        if (trackBuffer[i] & 0b00010000) {
-//                    Display_print0(hDisplay, i, 0, "O");
-//		        } else {
-//		            Display_print0(hDisplay, i, 0, "-");
-//		        }
-//		    }
 
 			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
 		}
 	}
 }
+Int main(void) {
+    //  Task variables
+    Task_Handle hMPU9250Task;
+    Task_Params MPU9250TaskParams;
+    Task_Handle hdisplayTask;
+    Task_Params displayTaskParams;
+    Task_Handle hCommTask;
+    Task_Params commTaskParams;
+//    Task_Handle hCheckTask;
+//    Task_Params checkTaskParams;
 
-Int main(void) {
-    //	Task variables
-	Task_Handle hMPU9250Task;
-	Task_Params MPU9250TaskParams;
-	Task_Handle hdisplayTask;
-	Task_Params displayTaskParams;
-//	Task_Handle hLabTask;
-//	Task_Params labTaskParams;
-	Task_Handle hCommTask;
-	Task_Params commTaskParams;
+    //  Initialize board
+    Board_initGeneral();
+    Board_initI2C();
 
-	//	Initialize board
-	Board_initGeneral();
-	Board_initI2C();
-
-	// Power Button
-	hPowerButton = PIN_open(&sPowerButton, cPowerButton);
-	if(!hPowerButton) {
-		System_abort("Error initializing power button shut pins\n");
-	}
-	if (PIN_registerIntCb(hPowerButton, &powerButtonFxn) != 0) {
-		System_abort("Error registering power button callback function");
-	}
+    // Power Button
+    hPowerButton = PIN_open(&sPowerButton, cPowerButton);
+    if(!hPowerButton) {
+        System_abort("Error initializing power button shut pins\n");
+    }
+    if (PIN_registerIntCb(hPowerButton, &powerButtonFxn) != 0) {
+        System_abort("Error registering power button callback function");
+    }
 
     // INITIALIZE BUTTON0
-	hButton0 = PIN_open(&sButton0, cButton0);
-	if(!hButton0) {
-	    System_abort("Error initializing led button shut pins\n");
-	}
-	if (PIN_registerIntCb(hButton0, &Button0Fxn) != 0) {
-	    System_abort("Error registering led button callback function");
-	}
+    hButton0 = PIN_open(&sButton0, cButton0);
+    if(!hButton0) {
+        System_abort("Error initializing led button shut pins\n");
+    }
+    if (PIN_registerIntCb(hButton0, &Button0Fxn) != 0) {
+        System_abort("Error registering led button callback function");
+    }
 
-	// Init Leds
+    // Init Leds
     hLed = PIN_open(&sLed, cLed);
     if(!hLed) {
         System_abort("Error initializing LED pin\n");
@@ -577,56 +543,56 @@ Int main(void) {
     // Init displayTask
     Task_Params_init(&displayTaskParams);
     displayTaskParams.stackSize = STACKSIZE_displayTask;
-    displayTaskParams.stack		= &displayTaskStack;
-    displayTaskParams.priority	= 3;
+    displayTaskParams.stack     = &displayTaskStack;
+    displayTaskParams.priority  = 3; // cant set to 4??
 
     hdisplayTask = Task_create(displayTask, &displayTaskParams, NULL);
     if (hdisplayTask == NULL) {
-    	System_abort("displayTask create failed!");
+        System_abort("displayTask create failed!");
     }
 
+//    // Init check task
+//    Task_Params_init(&checkTaskParams);
+//    checkTaskParams.stackSize = STACKSIZE_checkTask;
+//    checkTaskParams.stack     = &checkTaskStack;
+//    checkTaskParams.priority  = 3;
+//
+//    hCheckTask = Task_create(checkTask, &checkTaskParams, NULL);
+//    if (hCheckTask == NULL) {
+//        System_abort("CheckTask create failed!");
+//    }
 
     // OPEN MPU POWER PIN
     hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
     if (hMpuPin == NULL) {
-    	System_abort("Pin open failed!");
+        System_abort("Pin open failed!");
     }
-    //	Init MPU9250Task
+    //  Init MPU9250Task
     Task_Params_init(&MPU9250TaskParams);
-    MPU9250TaskParams.stackSize	= STACKSIZE_MPU9250Task;
-    MPU9250TaskParams.stack		= &MPU9250TaskStack;
-    MPU9250TaskParams.priority	= 2;
+    MPU9250TaskParams.stackSize = STACKSIZE_MPU9250Task;
+    MPU9250TaskParams.stack     = &MPU9250TaskStack;
+    MPU9250TaskParams.priority  = 2;
 
     hMPU9250Task = Task_create(MPU9250Task, &MPU9250TaskParams, NULL);
     if (hMPU9250Task == NULL) {
-    	System_abort("MPU9250Task create failed!");
+        System_abort("MPU9250Task create failed!");
     }
-
-////	jtkj: Init Main Task
-//    Task_Params_init(&labTaskParams);
-//    labTaskParams.stackSize = STACKSIZE;
-//    labTaskParams.stack = &labTaskStack;
-//    labTaskParams.priority=2;
-//
-//    hLabTask = Task_create(labTask, &labTaskParams, NULL);
-//    if (hLabTask == NULL) {
-//    	System_abort("Task create failed!");
-//    }
-
 
     // Init communication task
     Task_Params_init(&commTaskParams);
-    commTaskParams.stackSize	= STACKSIZE_commTask;
-    commTaskParams.stack		= &commTaskStack;
-    commTaskParams.priority		= 1;
+    commTaskParams.stackSize    = STACKSIZE_commTask;
+    commTaskParams.stack        = &commTaskStack;
+    commTaskParams.priority     = 1;
     Init6LoWPAN();
     hCommTask = Task_create(commTask, &commTaskParams, NULL);
     if (hCommTask == NULL) {
-    	System_abort("Task create failed!");
+        System_abort("CommTask create failed!");
     }
 
+    System_printf("before bios");
     BIOS_start();
-
+    System_printf("after bios");
     return (0);
 }
+
 
