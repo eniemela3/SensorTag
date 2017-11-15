@@ -34,8 +34,8 @@ Char displayTaskStack[STACKSIZE_displayTask];
 #define STACKSIZE_MPU9250Task 4096
 Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 
-//#define STACKSIZE_checkTask 1024
-//Char checkTaskStack[STACKSIZE_checkTask];
+#define STACKSIZE_checkTask 1024
+Char checkTaskStack[STACKSIZE_checkTask];
 
 // pixel graphics
 #define OBSTACLE_W 12
@@ -219,19 +219,19 @@ Void moveBall() {
     }
 }
 
-//Void checkTask(UArg arg0, UArg arg1) {
-//    // Checks whether the ball and an obstacle are in the same position
-////    uint8_t bottomLine = trackBuffer[5];
-////
-////    uint8_t bitMaskLeft = 0b00110000;
-////    uint8_t bitMaskRight = 0b00001100;
-////    if ((bottomline & bitMaskLeft) && (BallPos))
+Void checkTask(UArg arg0, UArg arg1) {
+    // Checks whether the ball and an obstacle are in the same position
+//    uint8_t bottomLine = trackBuffer[5];
 //
-//    while (1) {
-////        if (flyState == FLYING) {////            ball_r = BALL_R_FLYING;////            flyState = CANT_FLY;////        } else if (flyState == CANT_FLY) {////            ball_r = BALL_R;////            flyState = CAN_FLY;
-////        }//        Task_sleep(100000 / Clock_tickPeriod);
-//    }
-//}
+//    uint8_t bitMaskLeft = 0b00110000;
+//    uint8_t bitMaskRight = 0b00001100;
+//    if ((bottomline & bitMaskLeft) && (BallPos))
+
+    while (myState == GAME) {
+//        if (flyState == FLYING) {//            ball_r = BALL_R_FLYING;//            flyState = CANT_FLY;//        } else if (flyState == CANT_FLY) {//            ball_r = BALL_R;//            flyState = CAN_FLY;
+//        }        Task_sleep(100000 / Clock_tickPeriod);
+    }
+}
 
 Void MPU9250Task(UArg arg0, UArg arg1) {
 //	I2C_Handle      i2c;
@@ -509,8 +509,8 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Params displayTaskParams;
     Task_Handle hCommTask;
     Task_Params commTaskParams;
-//    Task_Handle hCheckTask;
-//    Task_Params checkTaskParams;
+    Task_Handle hCheckTask;
+    Task_Params checkTaskParams;
 
     //  Initialize board
     Board_initGeneral();
@@ -551,16 +551,16 @@ Void displayTask(UArg arg0, UArg arg1) {
         System_abort("displayTask create failed!");
     }
 
-//    // Init check task
-//    Task_Params_init(&checkTaskParams);
-//    checkTaskParams.stackSize = STACKSIZE_checkTask;
-//    checkTaskParams.stack     = &checkTaskStack;
-//    checkTaskParams.priority  = 3;
-//
-//    hCheckTask = Task_create(checkTask, &checkTaskParams, NULL);
-//    if (hCheckTask == NULL) {
-//        System_abort("CheckTask create failed!");
-//    }
+    // Init check task
+    Task_Params_init(&checkTaskParams);
+    checkTaskParams.stackSize = STACKSIZE_checkTask;
+    checkTaskParams.stack     = &checkTaskStack;
+    checkTaskParams.priority  = 2;
+
+    hCheckTask = Task_create(checkTask, &checkTaskParams, NULL);
+    if (hCheckTask == NULL) {
+        System_abort("CheckTask create failed!");
+    }
 
     // OPEN MPU POWER PIN
     hMpuPin = PIN_open(&MpuPinState, MpuPinConfig);
