@@ -1,7 +1,7 @@
-#include <stdio.h>
 /*
  *  ======== main.c ========
  */
+ #include <stdio.h>
 /* XDCtools Header files */
 #include <xdc/std.h>
 #include <xdc/runtime/System.h>
@@ -47,7 +47,6 @@ Char checkTaskStack[STACKSIZE_checkTask];
 #define BALL_R_FLYING 6
 #define BALL_R 4
 static uint8_t ball_r = BALL_R;
-static flyCounter = 0;
 
 // xy-coordinate on the display
 struct point {
@@ -77,6 +76,10 @@ struct trackCoordinates {
 // Main state machine
 enum mainState { STARTUP=0, MENU, GAME, CALIBRATE };
 enum mainState myState;
+
+// Game state machine
+enum gameStatus { ALIVE=1, GAMEOVER=0 };
+enum gameStatus gameState;
 
 // Flying state machine
 enum flyingState { CAN_FLY=0, FLYING, CANT_FLY };
@@ -184,6 +187,7 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 Void commTask(UArg arg0, UArg arg1) {
 	while ((myState == STARTUP) || (myState == CALIBRATE)) {
 		// prevent data receive during startup or sensor calibration
+		//Task_sleep(100000 / Clock_tickPeriod);
 	}
     char payload[16];
     uint16_t SenderAddr;
@@ -197,12 +201,14 @@ Void commTask(UArg arg0, UArg arg1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
-            trackBuffer[5] = trackBuffer[4];
-            trackBuffer[4] = trackBuffer[3];
-            trackBuffer[3] = trackBuffer[2];
-            trackBuffer[2] = trackBuffer[1];
-            trackBuffer[1] = trackBuffer[0];
-            trackBuffer[0] = payload[0];
+            if (myState == GAME) {
+            	trackBuffer[5] = trackBuffer[4];
+            	trackBuffer[4] = trackBuffer[3];
+            	trackBuffer[3] = trackBuffer[2];
+            	trackBuffer[2] = trackBuffer[1];
+            	trackBuffer[1] = trackBuffer[0];
+            	trackBuffer[0] = payload[0];
+            }
         }
     }
 }
@@ -220,17 +226,28 @@ Void moveBall() {
 }
 
 Void checkTask(UArg arg0, UArg arg1) {
-    // Checks whether the ball and an obstacle are in the same position
-//    uint8_t bottomLine = trackBuffer[5];
-//
-//    uint8_t bitMaskLeft = 0b00110000;
-//    uint8_t bitMaskRight = 0b00001100;
-//    if ((bottomline & bitMaskLeft) && (BallPos))
-
     while (myState == GAME) {
-//        if (flyState == FLYING) {//            ball_r = BALL_R_FLYING;//            flyState = CANT_FLY;//        } else if (flyState == CANT_FLY) {//            ball_r = BALL_R;//            flyState = CAN_FLY;
-//        }        Task_sleep(100000 / Clock_tickPeriod);
+    	// Update flyState
+        if (flyState == FLYING) {            ball_r = BALL_R_FLYING;            flyState = CANT_FLY;        } else if (flyState == CANT_FLY) {            ball_r = BALL_R;            flyState = CAN_FLY;
+        }
+
+        // Check if ball and obstacle overlap
+        if (flyState == FLYING) {
+        	if ((BallPos == LEFT) && (trackBuffer[5] & LEFTLANE_STATIC)) {
+        		gameState = GAMEOVER;
+        	} else if ((BallPos == RIGHT) && (trackBuffer[5] & RIGHTLANE_STATIC)) {
+        		gameState = GAMEOVER;
+        	}
+        } else {
+        	if ((BallPos == LEFT) && (trackBuffer[5] & LEFTLANE_MOVING)) {
+        		gameState = GAMEOVER;
+        	} else if ((BallPos == RIGHT) && (trackBuffer[5] & RIGHTLANE_MOVING)) {
+        		gameState = GAMEOVER;
+        	}
+        }
+        Task_sleep(100000 / Clock_tickPeriod);
     }
+    Task_sleep(100000 / Clock_tickPeriod);
 }
 
 Void MPU9250Task(UArg arg0, UArg arg1) {
@@ -362,13 +379,13 @@ Void drawObstacles(tContext *pContext, tRectangle ObstacleRect) {
 }
 
 Void drawBall(tContext *pContext) {
-    if (flyState == FLYING) {
-        ball_r = BALL_R_FLYING;
-        flyState = CANT_FLY;
-    } else if (flyState == CANT_FLY) {
-        ball_r = BALL_R;
-        flyState = CAN_FLY;
-    }
+//    if (flyState == FLYING) {
+//        ball_r = BALL_R_FLYING;
+//        flyState = CANT_FLY;
+//    } else if (flyState == CANT_FLY) {
+//        ball_r = BALL_R;
+//        flyState = CAN_FLY;
+//    }
     if (BallPos == LEFT) {
         GrCircleFill(pContext, MID_L_COORD - TRACK_W/4, TRACK_H/12 + 5*TRACK_H/6, ball_r);
     } else {
@@ -391,6 +408,13 @@ Void showMenu(Display_Params displayParams) {
     Display_print0(hDisplay, 4, 0, text);
     sprintf(text, "gz = %.3f", gz);
     Display_print0(hDisplay, 5, 0, text);
+
+}
+
+Void showGameOver(Display_Params displayParams) {
+	char text[17];
+	sprintf(text, "GAME OVER!");
+	Display_print0(hDisplay, 6, 3, text);
 
 }
 
@@ -480,26 +504,59 @@ Void displayTask(UArg arg0, UArg arg1) {
 
 	tRectangle ObstacleRect;
 
+	while (myState == STARTUP) {
+		// prevent refreshing display during startup
+		Task_sleep(100000 / Clock_tickPeriod);
+	}
 	while (1) {
 		Display_clear(hDisplay);
-		while (myState == MENU) {
+		switch (myState) {
+		case MENU:
 			showMenu(displayParams);
 			Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
-		}
-		while (myState == CALIBRATE) {
-		    showCalibration(displayParams);
-		    // Task_sleeps built into showCalibration
-		}
-		while (myState == GAME) {
-			drawTrack(pContext);
-			drawBall(pContext);
-			drawObstacles(pContext, ObstacleRect);
+			break;
+		case CALIBRATE:
+			showCalibration(displayParams);
+			// Task_sleeps built into showCalibration
+			break;
+		case GAME:
+			if (gameState == ALIVE) {
+				drawTrack(pContext);
+				drawBall(pContext);
+				drawObstacles(pContext, ObstacleRect);
 
-			GrFlush(pContext);
-
-			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+				GrFlush(pContext);
+				Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+			} else { // gameState == GAMEOVER
+				showGameOver(displayParams);
+				GrFlush(pContext);
+				Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+				myState = MENU;
+				gameState = ALIVE;
+			}
+			break;
+		default:
+			System_abort("displayTask found erroneous myState, aborting");
 		}
 	}
+
+//		while (myState == MENU) {
+//			showMenu(displayParams);
+//			Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
+//		}
+//		while (myState == CALIBRATE) {
+//		    showCalibration(displayParams);
+//		    // Task_sleeps built into showCalibration
+//		}
+//		while (myState == GAME) {
+//			drawTrack(pContext);
+//			drawBall(pContext);
+//			drawObstacles(pContext, ObstacleRect);
+//
+//			GrFlush(pContext);
+//
+//			Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+//		}
 }
 Int main(void) {
     //  Task variables
