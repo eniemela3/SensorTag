@@ -25,6 +25,8 @@
 #include "sensors/bmp280.h"
 #include "sensors/mpu9250.h"
 
+#include "graphics.h"
+
 #define STACKSIZE_commTask 2048
 Char commTaskStack[STACKSIZE_commTask];
 
