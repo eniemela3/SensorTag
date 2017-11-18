@@ -8,4 +8,6 @@
 !README.md
 !Suunnitelma.pdf
 !main.c
+!graphics.c
+!graphics.h
 !*.xlsx
