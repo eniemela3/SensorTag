@@ -20,6 +20,8 @@
 #include "Board.h"
 #include "mpu9250.h"
 
+#include "graphics.h"
+
 #define PI	3.14159265
 
 #define XG_OFFSET_H      0x13  // User-defined trim values for gyroscope
