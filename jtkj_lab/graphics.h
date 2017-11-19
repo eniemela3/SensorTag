@@ -13,6 +13,6 @@
 #include <inttypes.h>
 
 void drawFlyingObstacle(uint8_t x, uint8_t y, tContext *pContext);
-void drawDiagonalObstacle(uint8_t x, uint8_t y, tContext *pContext);
+void drawDiagObstacle(uint8_t x, uint8_t y, tContext *pContext);
 
 #endif /* GRAPHICS_H_ */
