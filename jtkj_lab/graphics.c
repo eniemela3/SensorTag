@@ -14,7 +14,7 @@
 // 1 2
 // 3 4
 
-const uint8_t flyingObstacleData1[8] = {
+static const uint8_t flyingObstacleData1[8] = {
 		0b00000111,
 		0b00000011,
 		0b00000001,
@@ -25,7 +25,7 @@ const uint8_t flyingObstacleData1[8] = {
 		0b00000001
 };
 
-const uint8_t flyingObstacleData2[8] = {
+static const uint8_t flyingObstacleData2[8] = {
 		0b11110000,
 		0b11100000,
 		0b11000000,
@@ -36,7 +36,7 @@ const uint8_t flyingObstacleData2[8] = {
 		0b11000000
 };	
 
-const uint8_t flyingObstacleData3[8] = {
+static const uint8_t flyingObstacleData3[8] = {
 		0b01111111,
 		0b00111111,
 		0b00000011,
@@ -48,7 +48,7 @@ const uint8_t flyingObstacleData3[8] = {
 		0b00000000
 };
 
-const uint8_t flyingObstacleData4[8] = {
+static const uint8_t flyingObstacleData4[8] = {
 		0b11111111,
 		0b11111110,
 		0b11100000,
@@ -60,7 +60,7 @@ const uint8_t flyingObstacleData4[8] = {
 		0b00000000
 };
 
-const uint8_t diagObstacleData1[8] = {
+static const uint8_t diagObstacleData1[8] = {
 		0b00000111,
 		0b00001000,
 		0b00010000,
@@ -71,7 +71,7 @@ const uint8_t diagObstacleData1[8] = {
 		0b01000000
 };
 
-const uint8_t diagObstacleData2[8] = {
+static const uint8_t diagObstacleData2[8] = {
 		0b00000000,
 		0b10110000,
 		0b11001000,
@@ -82,7 +82,7 @@ const uint8_t diagObstacleData2[8] = {
 		0b00000110
 };
 
-const uint8_t diagObstacleData3[8] = {
+static const uint8_t diagObstacleData3[8] = {
 		0b00100000,
 		0b00100000,
 		0b00011001,
@@ -93,7 +93,7 @@ const uint8_t diagObstacleData3[8] = {
 		0b00000000
 };									   
 
-const uint8_t diagObstacleData4[8] = {
+static const uint8_t diagObstacleData4[8] = {
 		0b00000001,
 		0b00000001,
 		0b10000001,
@@ -108,7 +108,7 @@ uint32_t imgPalette[] = {0, 0xFFFFFF};
 
 // Defining image components
 
-const tImage flyingObstacle1 = {
+static const tImage flyingObstacle1 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -117,7 +117,7 @@ const tImage flyingObstacle1 = {
 		.pPixel = flyingObstacleData1
 };
 
-const tImage flyingObstacle2 = {
+static const tImage flyingObstacle2 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -126,7 +126,7 @@ const tImage flyingObstacle2 = {
 		.pPixel = flyingObstacleData2
 };
 
-const tImage flyingObstacle3 = {
+static const tImage flyingObstacle3 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -135,7 +135,7 @@ const tImage flyingObstacle3 = {
 		.pPixel = flyingObstacleData3
 };
 
-const tImage flyingObstacle4 = {
+static const tImage flyingObstacle4 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -144,7 +144,7 @@ const tImage flyingObstacle4 = {
 		.pPixel = flyingObstacleData4
 };
 
-const tImage diagObstacle1 = {
+static const tImage diagObstacle1 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -153,7 +153,7 @@ const tImage diagObstacle1 = {
 		.pPixel = diagObstacleData1
 };
 
-const tImage diagObstacle2 = {
+static const tImage diagObstacle2 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -162,7 +162,7 @@ const tImage diagObstacle2 = {
 		.pPixel = diagObstacleData2
 };
 
-const tImage diagObstacle3 = {
+static const tImage diagObstacle3 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,
@@ -171,7 +171,7 @@ const tImage diagObstacle3 = {
 		.pPixel = diagObstacleData3
 };
 
-const tImage diagObstacle4 = {
+static const tImage diagObstacle4 = {
 		.BPP = IMAGE_FMT_1BPP_UNCOMP,
 		.NumColors = 2,
 		.XSize = 1,

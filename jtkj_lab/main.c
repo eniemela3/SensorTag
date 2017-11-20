@@ -26,8 +26,16 @@
 #include "sensors/bmp280.h"
 #include "sensors/mpu9250.h"
 
+#include <inttypes.h>
+
 // Obstacle graphics
-#include "graphics.h"
+#include <graphics.h>
+
+// Functions used by displayTask
+#include <display_functions.h>
+
+// Functions used to run the game
+//#include <game.h>
 
 #define STACKSIZE_commTask 2048
 Char commTaskStack[STACKSIZE_commTask];
@@ -38,37 +46,12 @@ Char displayTaskStack[STACKSIZE_displayTask];
 #define STACKSIZE_MPU9250Task 4096
 Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 
-// Sensor thresholds (before possible calibration)
-#define ACC_HI_THERSHOLD 0.25
-#define ACC_LO_THERSHOLD -0.25
-
-// Pixel graphics
-#define OBSTACLE_W 16
-#define OBSTACLE_H 16
-#define TRACK_H 86
-#define TRACK_W 32
-#define MID_COORD 48
-#define BALL_R_FLYING 6
-#define BALL_R 4
-static uint8_t ball_r = BALL_R;
-
-// New pixel graphics, hard coded because pixel graphics don't allow for a modular design
-#define RIGHT_SIDE_X 70
-#define RIGHT_LANE_X 50
-#define LEFT_LANE_X 34
-#define LEFT_SIDE_X 18
-#define ROW_0_Y 8
-#define ROW_1_Y 24
-#define ROW_2_Y 40
-#define ROW_3_Y 56
-#define ROW_4_Y 72
 
 
-// xy-coordinate on the display
-struct point {
-   uint8_t x; // x = [0, 95]
-   uint8_t y; // y = [0, 95]
-};
+
+
+
+
 
 //// Coordinates for drawing rectangle
 //struct rect {
@@ -76,56 +59,19 @@ struct point {
 //   struct point min;
 //} displayRect;
 
-// Coordinates for drawing obstacles and ball
-typedef struct {
-    struct point ballR;
-    struct point ballL;
-    uint8_t obst_y[5];
-    uint8_t obstRR_x;
-    uint8_t obstR_x;
-    uint8_t obstL_x;
-    uint8_t obstLL_x;
-    uint8_t trackMaxX;
-    uint8_t trackMinX;
-    uint8_t trackMaxY;
-} trackCoordinates;
-static trackCoordinates trackCoord;
+
 
 // DIY boolean
 enum diyBoolean {BOOLEAN_0=0, BOOLEAN_1};
 enum diyBoolean button0AllowExec = BOOLEAN_1;
 
 // Main state machine
-enum mainState {STARTUP=0, MENU, GAME, CALIBRATE1, CALIBRATE2, HIGHSCORES};
-enum mainState myState;
 
-// Game state machine
-enum gameStatus {ALIVE=1, GAMEOVER=0};
-enum gameStatus gameState = ALIVE;
-
-// Flying state machine
-enum flyingState {CAN_FLY=0, FLYING, CANT_FLY};
-enum flyingState flyState = CAN_FLY;
-
-// Object's position on the track
-enum trackPosition {LEFT=0, RIGHT};
-enum trackPosition BallPos;
-
-// Cursor's position in the menu
-enum cursorPosition {C_NEW_GAME=5, C_CALIBRATION, C_HIGH_SCORES};
-enum cursorPosition cursorPos;
-
-// Obstacle's type and position on track as bitmask
-enum obstacle {RIGHTSIDE_MOVING=2, RIGHTLANE_MOVING=4, RIGHTLANE_STATIC=8, LEFTLANE_STATIC=16, LEFTLANE_MOVING=32, LEFTSIDE_MOVING=64};
-enum obstacle obstaclePos;
 
 // Clock handle
 Clock_Handle clockHandle;
 
-// Default acceleration thresholds if calibration is never run:
-static float calLeft = ACC_LO_THERSHOLD*2;
-static float calRight = ACC_HI_THERSHOLD*2;
-static float calFly = ACC_LO_THERSHOLD*2;
+
 
 // MPU global variables
 static PIN_Handle hMpuPin;
@@ -134,26 +80,13 @@ static PIN_Config MpuPinConfig[] = {
     Board_MPU_POWER  | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
-static float ax, ay, az, gx, gy, gz; // For raw data
-static float ax_off = 0; // Calibration offset values
-static float ay_off = 0; // default is that device is booted on flat surface
-static float az_off = 0;
-static float gx_off = 0;
-static float gy_off = 0;
-static float gz_off = 0;
+
 
 // MPU9250 uses its own I2C interface
 static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
     .pinSDA = Board_I2C0_SDA1,
     .pinSCL = Board_I2C0_SCL1
 };
-
-// commTask global variables
-static char message[9];
-static uint8_t trackBuffer[5];
-static uint8_t newTrackAvailable;
-static uint8_t gameScore = 0;
-static uint8_t highScores[10] = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 
 // Global display handle
 Display_Handle hDisplay;
@@ -195,7 +128,28 @@ Void debounceTimer(UArg arg0) {
     button0AllowExec = BOOLEAN_1;
 }
 
-// Button1 (bottom) button press handler TODO
+Clock_Handle createTimer(uint8_t period, Clock_FuncPtr clkFxn) {
+    // Period in tenths of a second
+
+    // RTOS:n kellomuuttujat
+    Clock_Handle clkHandle;
+    Clock_Params clkParams;
+
+    // Alustetaan kello halutusti
+    Clock_Params_init(&clkParams);
+    clkParams.period = 0; // To launch only when called
+    clkParams.startFlag = FALSE;
+
+    // Luodaan kello
+    clkHandle = Clock_create((Clock_FuncPtr)clkFxn, 100000 * period / Clock_tickPeriod, &clkParams, NULL);
+    if (clkHandle == NULL) {
+    System_abort("Clock creat failed");
+    }
+//    return clkParams;
+    return clkHandle;
+}
+
+// Button1 (bottom) button press handler
 Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
     Display_clear(hDisplay);
     Display_close(hDisplay);
@@ -289,74 +243,7 @@ Void commTask(UArg arg0, UArg arg1) {
     }
 }
 
-// Move ball left / right / up
-Void moveBall() {
-    if (ax < calLeft) {
-        BallPos = LEFT;
-    } else if (ax > calRight) {
-        BallPos = RIGHT;
-    }
-    if ((az < calFly) && (flyState == CAN_FLY)) {
-    	ball_r = BALL_R_FLYING;
-    	flyState = FLYING;
-    }
-}
 
-Void updateHighScores() {
-	uint8_t i;
-	uint8_t j;
-	for (i = 0; i < 10; i++) {
-		System_printf("ok\n");
-		if (gameScore > highScores[i]) {
-			for (j = 9; j > i; j--) {
-				highScores[j] = highScores[j-1];
-			}
-			highScores[i] = gameScore;
-			return;
-		}
-	}
-	// gameScore = 0;
-}
-
-// This makes sure ball falls down from flying & dies when being hit
-Void updateBall() {
-	if (gameState == ALIVE) {
-		// Check if ball and obstacle overlap
-		if (flyState == FLYING) {
-			if (BallPos == LEFT) {
-				if (trackBuffer[4] & LEFTLANE_STATIC) {
-					gameState = GAMEOVER;
-				}
-			} else if (BallPos == RIGHT) {
-				if (trackBuffer[4] & RIGHTLANE_STATIC) {
-					gameState = GAMEOVER;
-				}
-			}
-		} else { // flyState != FLYING
-			if (BallPos == LEFT) {
-				if (trackBuffer[4] & LEFTLANE_MOVING) {
-					gameState = GAMEOVER;
-				}
-			} else if (BallPos == RIGHT) {
-				if (trackBuffer[4] & RIGHTLANE_MOVING) {
-					gameState = GAMEOVER;
-				}
-			}
-		}
-	}
-	if (gameState == GAMEOVER) {
-		updateHighScores();
-	}
-
-	// flyState must be changed after overlap-check
-	if (flyState == FLYING) {
-		ball_r = BALL_R_FLYING;
-		flyState = CANT_FLY;
-	} else if (flyState == CANT_FLY) {
-		ball_r = BALL_R;
-		flyState = CAN_FLY;
-	}
-}
 
 
 // Acceleration/gyro sensor task
@@ -494,154 +381,6 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 	}
 }
 
-Void drawTrack(tContext *pContext) {
-    char msg[16];
-    sprintf(msg, "MSG: %s", message);
-    Display_print0(hDisplay, 11, 0, msg);
-    GrLineDrawH(pContext, 0, 95, trackCoord.trackMaxY);
-    GrLineDrawV(pContext, trackCoord.trackMinX, 0, trackCoord.trackMaxY);
-    GrLineDrawV(pContext, trackCoord.trackMaxX, 0, trackCoord.trackMaxY);
-}
-
-Void drawObstacles(tContext *pContext) {
-    int i;
-    for (i=0; i < 5; i++) {
-        // Covering 5 seconds worth of trackBuffer
-    	if (trackBuffer[i] & LEFTSIDE_MOVING) { // Moving obstacle on left side of track
-    		drawDiagObstacle(trackCoord.obstLL_x, trackCoord.obst_y[i], pContext);
-    	}
-    	if (trackBuffer[i] & LEFTLANE_MOVING) { // Moving obstacle in left lane
-    		drawDiagObstacle(trackCoord.obstL_x, trackCoord.obst_y[i], pContext);
-    	}
-    	if (trackBuffer[i] & LEFTLANE_STATIC) { // Static obstacle in left lane
-    		drawFlyingObstacle(trackCoord.obstL_x, trackCoord.obst_y[i], pContext);
-    	}
-    	if (trackBuffer[i] & RIGHTLANE_STATIC) { // Static obstacle in right lane
-    		drawFlyingObstacle(trackCoord.obstR_x, trackCoord.obst_y[i], pContext);
-    	}
-    	if (trackBuffer[i] & RIGHTLANE_MOVING) { // Moving obstacle in right lane
-    		drawDiagObstacle(trackCoord.obstR_x, trackCoord.obst_y[i], pContext);
-    	}
-    	if (trackBuffer[i] & RIGHTSIDE_MOVING) { // Moving obstacle on right side of track
-    		drawDiagObstacle(trackCoord.obstRR_x, trackCoord.obst_y[i], pContext);
-    	}
-    }
-}
-
-Void drawBall(tContext *pContext) {
-    if (BallPos == LEFT) {
-        GrCircleFill(pContext, MID_COORD - TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
-    } else {
-        GrCircleFill(pContext, MID_COORD + TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
-    }
-}
-
-Void showMenu() {
-    Display_clear(hDisplay);
-    Display_print0(hDisplay, 3, 1, "RIVER SURVIVAL");
-    enum cursorPosition pos;
-    while (myState == MENU) {
-    	pos = cursorPos;
-    	switch (pos) {
-    	case C_NEW_GAME:
-    		break;
-    	case C_CALIBRATION:
-    		break;
-    	case C_HIGH_SCORES:
-    		break;
-    	}
-        Display_print0(hDisplay, C_NEW_GAME, 3, "New game");
-        Display_print0(hDisplay, C_CALIBRATION, 3, "Calibration");
-        Display_print0(hDisplay, C_HIGH_SCORES, 3, "High scores");
-    	Display_print0(hDisplay, pos, 1, ">");
-    	Task_sleep(400000 / Clock_tickPeriod);
-    	Display_print0(hDisplay, pos, 1, " ");
-    	Task_sleep(400000 / Clock_tickPeriod);
-    }
-
-//    sprintf(text, "ax = %.3f", ax);
-//    Display_print0(hDisplay, 0, 0, text);
-//    sprintf(text, "ay = %.3f", ay);
-//    Display_print0(hDisplay, 1, 0, text);
-//    sprintf(text, "az = %.3f", az);
-//    Display_print0(hDisplay, 2, 0, text);
-//    sprintf(text, "gx = %.3f", gx);
-//    Display_print0(hDisplay, 3, 0, text);
-//    sprintf(text, "gy = %.3f", gy);
-//    Display_print0(hDisplay, 4, 0, text);
-//    sprintf(text, "gz = %.3f", gz);
-//    Display_print0(hDisplay, 5, 0, text);
-
-}
-
-Void showGameOver() {
-	char text[8];
-	sprintf(text, "%d",gameScore);
-	Display_print0(hDisplay, 6, 3, "GAME OVER");
-	Display_print0(hDisplay, 8, 8, text);
-	gameScore = 0; // maybe do this somewhere else?
-}
-
-// Print instructions for calibration
-Void showCalibration1() {
-    Display_clear(hDisplay);
-    Display_print0(hDisplay, 1, 2, "CALIBRATION");
-    Display_print0(hDisplay, 3, 0, "When you press");
-    Display_print0(hDisplay, 4, 0, "top button, the");
-    Display_print0(hDisplay, 5, 0, "device assumes");
-    Display_print0(hDisplay, 6, 0, "it lays flat");
-    Display_print0(hDisplay, 7, 0, "and saves data.");
-    Display_print0(hDisplay, 8, 0, "Then you can");
-    Display_print0(hDisplay, 9, 0, "set thresholds");
-    Display_print0(hDisplay, 10, 0, "for movement.");
-
-    while (myState == CALIBRATE1) {
-    	Task_sleep(100000 / Clock_tickPeriod);
-    }
-}
-
-Void showCalibration2() {
-    Display_clear(hDisplay);
-    char textLine[16];
-    // These won't change during calibration:
-    Display_print0(hDisplay, 1, 0, "CALIBRATING");
-    Display_print0(hDisplay, 3, 0, "Tilt & jump");
-    Display_print0(hDisplay, 5, 0, "Right =");
-    Display_print0(hDisplay, 6, 0, "Left  =");
-    Display_print0(hDisplay, 7, 0, "Jump  =");
-    Display_print0(hDisplay, 10, 0, "PRESS TO FINISH");
-
-    // Values that will change during calibration:
-    while (myState == CALIBRATE2) {
-        sprintf(textLine, "%.2f", calRight);
-        Display_print0(hDisplay, 5, 8, textLine);
-        sprintf(textLine, "%.2f", -calLeft);
-        Display_print0(hDisplay, 6, 8, textLine);
-        sprintf(textLine, "%.2f", -calFly);
-        Display_print0(hDisplay, 7, 8, textLine);
-        // Update display every 0.1 seconds
-        Task_sleep(100000 / Clock_tickPeriod);
-    }
-    // When calibration ends:
-    Display_print0(hDisplay, 10, 0, "DONE           "); // Spaces because of DISPLAY_CLEAR_NONE
-    Task_sleep(1000000 / Clock_tickPeriod);
-    Display_clear(hDisplay);
-}
-
-Void showHighScores() {
-	Display_clear(hDisplay);
-	uint8_t i;
-	char text[17];
-    Display_print0(hDisplay, 0, 3, "HIGH SCORES");
-	for (i = 0; i < 10; i++) {
-		sprintf(text, "%d", highScores[i]);
-	    Display_print0(hDisplay, i+2, 8, text);
-	}
-	while (myState == HIGHSCORES) {
-		Task_sleep(100000 / Clock_tickPeriod);
-	}
-}
-
 Void displayTask(UArg arg0, UArg arg1) {
 // 96 x 96 px	16 x 12 char (char = 5 x 7 px)
 	Display_Params displayParams;
@@ -688,15 +427,15 @@ Void displayTask(UArg arg0, UArg arg1) {
 		switch (myState) {
 		case MENU:
 			Display_clear(hDisplay);
-			showMenu();
+			showMenu(hDisplay);
 			Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
 			break;
 		case CALIBRATE1:
-			showCalibration1();
+			showCalibration1(hDisplay);
 			// Task_sleeps built into showCalibration1
 			break;
 		case CALIBRATE2:
-			showCalibration2();
+			showCalibration2(hDisplay);
 			// Task_sleeps built into showCalibration2
 			break;
 		case GAME:
@@ -707,13 +446,13 @@ Void displayTask(UArg arg0, UArg arg1) {
 				newTrackAvailable = 0;
 				Display_clear(hDisplay); // Do this as late as possible
 				drawObstacles(pContext);
-				drawTrack(pContext); // after obstacles so bmps won't undo track lines
+				drawTrack(pContext, hDisplay); // after obstacles so bmps won't undo track lines
 				updateBall();
 				drawBall(pContext);
 				GrFlush(pContext);
 				Task_sleep(900000 / Clock_tickPeriod);
 			} else if (gameState == GAMEOVER) { // Should work with just "else"
-				showGameOver();
+				showGameOver(hDisplay);
 				GrFlush(pContext);
 				Task_sleep(1000000 / Clock_tickPeriod); // 1sec
 				myState = MENU;
@@ -723,33 +462,12 @@ Void displayTask(UArg arg0, UArg arg1) {
 			}
 			break;
 		case HIGHSCORES:
-			showHighScores();
+			showHighScores(hDisplay);
 			break;
 		default:
 			System_abort("displayTask found erroneous myState, aborting");
 		}
 	}
-}
-
-Clock_Handle createTimer(uint8_t period, Clock_FuncPtr clkFxn) {
-	// Period in tenths of a second
-
-    // RTOS:n kellomuuttujat
-    Clock_Handle clkHandle;
-    Clock_Params clkParams;
-
-    // Alustetaan kello halutusti
-    Clock_Params_init(&clkParams);
-    clkParams.period = 0; // To launch only when called
-    clkParams.startFlag = FALSE;
-
-    // Luodaan kello
-    clkHandle = Clock_create((Clock_FuncPtr)clkFxn, 100000 * period / Clock_tickPeriod, &clkParams, NULL);
-    if (clkHandle == NULL) {
-    System_abort("Clock creat failed");
-    }
-//    return clkParams;
-    return clkHandle;
 }
 Int main(void) {
     // Task variables

@@ -8,6 +8,10 @@
 !README.md
 !Suunnitelma.pdf
 !main.c
-!graphics.c
-!graphics.h
+!/jtkj_lab/graphics.c
+!/jtkj_lab/graphics.h
+!/jtkj_lab/game.c
+!/jtkj_lab/game.h
+!/jtkj_lab/display_functions.c
+!/jtkj_lab/display_functions.h
 !*.xlsx
