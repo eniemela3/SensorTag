@@ -11,7 +11,7 @@
 #include <inttypes.h>
 #include <display_functions.h>
 
-// Pixel graphics
+// Pixel graphics (some are not used anymore) TODO
 #define OBSTACLE_W 16
 #define OBSTACLE_H 16
 #define TRACK_H 86
@@ -19,7 +19,7 @@
 #define MID_COORD 48
 #define BALL_R_FLYING 6
 #define BALL_R 4
-static uint8_t ball_r = BALL_R;
+extern uint8_t ball_r;
 
 // New pixel graphics, hard coded because pixel graphics don't allow for a modular design
 #define RIGHT_SIDE_X 70
@@ -42,18 +42,26 @@ extern enum flyingState flyState;
 
 // Object's position on the track
 enum trackPosition {LEFT=0, RIGHT};
-extern enum trackPosition BallPos;
+extern enum trackPosition ballPos;
 
-enum mainState {STARTUP=0, MENU, GAME, CALIBRATE1, CALIBRATE2, HIGHSCORES};
+// Main state machine
+enum mainState {STARTUP=0, MENU, GAME, CALIBRATE_HELP, CALIBRATE_LEVEL, CALIBRATE_MOVEMENT, HIGHSCORES};
 extern enum mainState myState;
 
 // Game state machine
 enum gameStatus {ALIVE=1, GAMEOVER=0};
 extern enum gameStatus gameState;
 
-// Obstacle's type and position on track as bitmask
-enum obstacle {RIGHTSIDE_MOVING=2, RIGHTLANE_MOVING=4, RIGHTLANE_STATIC=8, LEFTLANE_STATIC=16, LEFTLANE_MOVING=32, LEFTSIDE_MOVING=64};
-extern enum obstacle obstaclePos;
+// DIY boolean
+enum diyBoolean {BOOLEAN_0=0, BOOLEAN_1};
+extern enum diyBoolean button0AllowExec;
+extern enum diyBoolean button1AllowExec;
+extern enum diyBoolean newTrackAvailable;
+extern enum diyBoolean calLevelReady;
+
+// Obstacles's type and position on track as bitmasks
+enum obstaclePosition {RIGHTSIDE_MOVING=2, RIGHTLANE_MOVING=4, RIGHTLANE_STATIC=8, LEFTLANE_STATIC=16, LEFTLANE_MOVING=32, LEFTSIDE_MOVING=64};
+extern enum obstaclePosition obstaclePos;
 
 // xy-coordinate on the display
 struct point {
@@ -61,15 +69,15 @@ struct point {
    uint8_t y; // y = [0, 95]
 };
 
-// Coordinates for drawing obstacles and ball
+// Coordinates for drawing track, obstacles and ball
 typedef struct {
-    struct point ballR;
-    struct point ballL;
+    struct point ballR;	// Could use obstR_x instead
+    struct point ballL;	// Could use obstL_x instead
     uint8_t obst_y[5];
-    uint8_t obstRR_x;
-    uint8_t obstR_x;
-    uint8_t obstL_x;
-    uint8_t obstLL_x;
+    uint8_t obstRR_x;	// Right side (out of track)
+    uint8_t obstR_x;	// Right lane
+    uint8_t obstL_x;	// Left lane
+    uint8_t obstLL_x;	// Left side (out of track)
     uint8_t trackMaxX;
     uint8_t trackMinX;
     uint8_t trackMaxY;
@@ -81,13 +89,13 @@ extern float calLeft;
 extern float calRight;
 extern float calFly;
 
+// MPU current data & calibration offset data
 extern float ax, ay, az, gx, gy, gz;
 extern float ax_off, ay_off, az_off, gx_off, gy_off, gz_off;
 
 extern uint8_t trackBuffer[5];
 extern uint8_t gameScore;
 extern uint8_t highScores[10];
-extern uint8_t newTrackAvailable;
 
 void updateBall();
 void moveBall();

@@ -14,12 +14,12 @@
 #include <ti/sysbios/knl/Task.h>
 
 enum cursorPosition cursorPos;
-char message[9];
+char inGameRXMsg[9];
 
 void drawTrack(tContext *pContext, Display_Handle hDisplay) {
     // Draws the outline of the "river" track and displays a messaging area at the bottom
-    char msg[16];
-    sprintf(msg, "MSG: %s", message);
+    char msg[17]; // 14 should be enough
+    sprintf(msg, "MSG: %s", inGameRXMsg);
     Display_print0(hDisplay, 11, 0, msg);
     GrLineDrawH(pContext, 0, 95, trackCoord.trackMaxY);
     GrLineDrawV(pContext, trackCoord.trackMinX, 0, trackCoord.trackMaxY);
@@ -27,7 +27,7 @@ void drawTrack(tContext *pContext, Display_Handle hDisplay) {
 }
 
 void drawObstacles(tContext *pContext) {
-    // Draws obstacles from data received
+    // Draws obstacles from received data
     int i;
     for (i=0; i < 5; i++) {
         // Covering 5 seconds worth of trackBuffer
@@ -54,10 +54,12 @@ void drawObstacles(tContext *pContext) {
 
 void drawBall(tContext *pContext) {
     // Draws the ball in its correct position
-    if (BallPos == LEFT) {
+    if (ballPos == LEFT) {
         GrCircleFill(pContext, MID_COORD - TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
+//        GrCircleFill(pContext, trackCoord.ballL.x, trackCoord.ballL.y, ball_r);
     } else {
         GrCircleFill(pContext, MID_COORD + TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
+//        GrCircleFill(pContext, trackCoord.ballR.x, trackCoord.ballR.y, ball_r);
     }
 }
 
@@ -65,7 +67,7 @@ void showMenu(Display_Handle hDisplay) {
     // Shows menu and handles cursor movement within
     Display_clear(hDisplay);
     Display_print0(hDisplay, 3, 1, "RIVER SURVIVAL");
-    enum cursorPosition pos;
+    enum cursorPosition pos; // Using pos allows for selecting menu item that is not next to cursor! TODO
     while (myState == MENU) {
         pos = cursorPos;
         switch (pos) {
@@ -84,20 +86,6 @@ void showMenu(Display_Handle hDisplay) {
         Display_print0(hDisplay, pos, 1, " ");
         Task_sleep(400000 / Clock_tickPeriod);
     }
-
-//    sprintf(text, "ax = %.3f", ax);
-//    Display_print0(hDisplay, 0, 0, text);
-//    sprintf(text, "ay = %.3f", ay);
-//    Display_print0(hDisplay, 1, 0, text);
-//    sprintf(text, "az = %.3f", az);
-//    Display_print0(hDisplay, 2, 0, text);
-//    sprintf(text, "gx = %.3f", gx);
-//    Display_print0(hDisplay, 3, 0, text);
-//    sprintf(text, "gy = %.3f", gy);
-//    Display_print0(hDisplay, 4, 0, text);
-//    sprintf(text, "gz = %.3f", gz);
-//    Display_print0(hDisplay, 5, 0, text);
-
 }
 
 void showGameOver(Display_Handle hDisplay) {
@@ -106,10 +94,10 @@ void showGameOver(Display_Handle hDisplay) {
     sprintf(text, "%d",gameScore);
     Display_print0(hDisplay, 6, 3, "GAME OVER");
     Display_print0(hDisplay, 8, 8, text);
-    gameScore = 0; // maybe do this somewhere else?
+    gameScore = 0; // Maybe do this somewhere else?
 }
 
-void showCalibration1(Display_Handle hDisplay) {
+void showCalibrateHelp(Display_Handle hDisplay) {
     // Print instructions for calibration
     Display_clear(hDisplay);
     Display_print0(hDisplay, 1, 2, "CALIBRATION");
@@ -121,18 +109,44 @@ void showCalibration1(Display_Handle hDisplay) {
     Display_print0(hDisplay, 8, 0, "Then you can");
     Display_print0(hDisplay, 9, 0, "set thresholds");
     Display_print0(hDisplay, 10, 0, "for movement.");
-
-    while (myState == CALIBRATE1) {
-        Task_sleep(100000 / Clock_tickPeriod);
-    }
 }
 
-Void showCalibration2(Display_Handle hDisplay) {
-    // Displays calibration status
+Void showCalibrateLevel(Display_Handle hDisplay) {
+    // Displays level calibration status
+    Display_clear(hDisplay);
+    // These won't change during calibration:
+    Display_print0(hDisplay, 1, 2, "CALIBRATING");
+    Display_print0(hDisplay, 3, 0, "Hold still,");
+    Display_print0(hDisplay, 4, 0, "almost done!");
+
+    // Values that will change during calibration:
+    while (calLevelReady == BOOLEAN_0) {
+        Task_sleep(100000 / Clock_tickPeriod); // Update display every 0.1 seconds
+    }
+    // For debugging the calibrated values:
+//    char textLine[16];
+//    Display_print0(hDisplay, 5, 0, "ax =");
+//    Display_print0(hDisplay, 6, 0, "ay =");
+//    Display_print0(hDisplay, 7, 0, "az =");
+//    sprintf(textLine, "%.2f", ax_off);
+//    Display_print0(hDisplay, 5, 8, textLine);
+//    sprintf(textLine, "%.2f", ay_off);
+//    Display_print0(hDisplay, 6, 8, textLine);
+//    sprintf(textLine, "%.2f", az_off);
+//    Display_print0(hDisplay, 7, 8, textLine);
+
+    // When calibration ends:
+    Display_print0(hDisplay, 10, 0, "DONE");
+    Task_sleep(1000000 / Clock_tickPeriod);
+    myState = CALIBRATE_MOVEMENT;
+}
+
+Void showCalibrateMovement(Display_Handle hDisplay) {
+    // Displays movement calibration status
     Display_clear(hDisplay);
     char textLine[16];
     // These won't change during calibration:
-    Display_print0(hDisplay, 1, 0, "CALIBRATING");
+    Display_print0(hDisplay, 1, 2, "CALIBRATING");
     Display_print0(hDisplay, 3, 0, "Tilt & jump");
     Display_print0(hDisplay, 5, 0, "Right =");
     Display_print0(hDisplay, 6, 0, "Left  =");
@@ -140,33 +154,28 @@ Void showCalibration2(Display_Handle hDisplay) {
     Display_print0(hDisplay, 10, 0, "PRESS TO FINISH");
 
     // Values that will change during calibration:
-    while (myState == CALIBRATE2) {
+    while (myState == CALIBRATE_MOVEMENT) {
         sprintf(textLine, "%.2f", calRight);
         Display_print0(hDisplay, 5, 8, textLine);
-        sprintf(textLine, "%.2f", -calLeft);
+        sprintf(textLine, "%.2f", calLeft); // Negative value is shown TODO
         Display_print0(hDisplay, 6, 8, textLine);
-        sprintf(textLine, "%.2f", -calFly);
+        sprintf(textLine, "%.2f", calFly); // Negative value is shown TODO
         Display_print0(hDisplay, 7, 8, textLine);
-        // Update display every 0.1 seconds
-        Task_sleep(100000 / Clock_tickPeriod);
+        Task_sleep(100000 / Clock_tickPeriod); // Update display every 0.1 seconds
     }
     // When calibration ends:
     Display_print0(hDisplay, 10, 0, "DONE           "); // Spaces because of DISPLAY_CLEAR_NONE
-    Task_sleep(1000000 / Clock_tickPeriod);
-    Display_clear(hDisplay);
+    Task_sleep(1000000 / Clock_tickPeriod); // At this time myState is already changed and user inputs are allowed TODO
 }
 
 Void showHighScores(Display_Handle hDisplay) {
     // Displays high scores
     Display_clear(hDisplay);
-    uint8_t i;
     char text[17];
     Display_print0(hDisplay, 0, 3, "HIGH SCORES");
+    uint32_t i;
     for (i = 0; i < 10; i++) {
         sprintf(text, "%d", highScores[i]);
         Display_print0(hDisplay, i+2, 8, text);
-    }
-    while (myState == HIGHSCORES) {
-        Task_sleep(100000 / Clock_tickPeriod);
     }
 }

@@ -46,12 +46,8 @@ Char displayTaskStack[STACKSIZE_displayTask];
 #define STACKSIZE_MPU9250Task 4096
 Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 
-
-
-
-
-
-
+// How many samples are averaged for level calibration, make sure double can hold the sum of samples
+#define CALIBRATE_LEVEL_SAMPLES 5
 
 //// Coordinates for drawing rectangle
 //struct rect {
@@ -59,19 +55,9 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 //   struct point min;
 //} displayRect;
 
-
-
-// DIY boolean
-enum diyBoolean {BOOLEAN_0=0, BOOLEAN_1};
-enum diyBoolean button0AllowExec = BOOLEAN_1;
-
-// Main state machine
-
-
 // Clock handle
-Clock_Handle clockHandle;
-
-
+Clock_Handle clockHandleBtn0;
+Clock_Handle clockHandleBtn1;
 
 // MPU global variables
 static PIN_Handle hMpuPin;
@@ -80,7 +66,6 @@ static PIN_Config MpuPinConfig[] = {
     Board_MPU_POWER  | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
-
 
 // MPU9250 uses its own I2C interface
 static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
@@ -114,6 +99,8 @@ PIN_Config buttonConfig[] = {
     Board_BUTTON0 | PIN_INPUT_EN | PIN_PULLUP | PINCC26XX_WAKEUP_NEGEDGE,
     PIN_TERMINATE
 };
+enum diyBoolean button0AllowExec = BOOLEAN_1;
+enum diyBoolean button1AllowExec = BOOLEAN_1;
 
 // Leds configuraion
 static PIN_Handle hLed;
@@ -123,49 +110,75 @@ PIN_Config cLed[] = {
     Board_LED1 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
+static unsigned char inGameTXMessage[8] = "Tere";
 
-Void debounceTimer(UArg arg0) {
+Void debounceTimerBtn0(UArg arg0) {
+	// Sets flag to allow Button0 to function after button pressed
     button0AllowExec = BOOLEAN_1;
 }
 
+Void debounceTimerBtn1(UArg arg0) {
+	// Sets flag to allow Button1 to function after button pressed
+    button1AllowExec = BOOLEAN_1;
+}
+
 Clock_Handle createTimer(uint8_t period, Clock_FuncPtr clkFxn) {
+	// Function to create a new timer that runs once using Clock_start()
     // Period in tenths of a second
 
-    // RTOS:n kellomuuttujat
+    // RTOS clock variables
     Clock_Handle clkHandle;
     Clock_Params clkParams;
 
-    // Alustetaan kello halutusti
+    // Initialization
     Clock_Params_init(&clkParams);
     clkParams.period = 0; // To launch only when called
-    clkParams.startFlag = FALSE;
+    clkParams.startFlag = FALSE; // FALSE == not started with Clock_create()
 
-    // Luodaan kello
     clkHandle = Clock_create((Clock_FuncPtr)clkFxn, 100000 * period / Clock_tickPeriod, &clkParams, NULL);
     if (clkHandle == NULL) {
-    System_abort("Clock creat failed");
+    	System_abort("Clock creat failed");
     }
-//    return clkParams;
     return clkHandle;
 }
 
-// Button1 (bottom) button press handler
 Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
-    Display_clear(hDisplay);
-    Display_close(hDisplay);
-    Task_sleep(100000 / Clock_tickPeriod);
-
-	PIN_close(hPowerButton);
-
-    PINCC26XX_setWakeup(cPowerWake);
-	Power_shutdown(NULL,0);
+	// Button1 (bottom) button press handler
+	if (button1AllowExec == BOOLEAN_1) {
+		button1AllowExec = BOOLEAN_0;
+		switch (myState) {
+		case MENU:
+		    Display_clear(hDisplay);
+		    Display_close(hDisplay);
+		    Task_sleep(100000 / Clock_tickPeriod);
+			PIN_close(hPowerButton);
+		    PINCC26XX_setWakeup(cPowerWake);
+			Power_shutdown(NULL,0);
+			break;
+		case CALIBRATE_HELP:
+			break;
+	    case CALIBRATE_LEVEL:
+			break;
+	    case CALIBRATE_MOVEMENT:
+			break;
+	    case GAME:
+		    Send6LoWPAN(IEEE80154_SERVER_ADDR, inGameTXMessage, 8);
+		    PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0));
+			break;
+	    case HIGHSCORES:
+			break;
+	    default:
+			break;
+		}
+	    Clock_start(clockHandleBtn1); // Start debounce timer
+	}
 }
 
-// Button0 (top) button press handler
 Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
+	// Button0 (top) button press handler
 	if (button0AllowExec == BOOLEAN_1) { // For debounce
 		button0AllowExec = BOOLEAN_0;
-	    PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0) );
+//	    PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0));
 	    switch (myState) {
 	    case MENU:
 	    	switch (cursorPos) {
@@ -173,17 +186,20 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 	    		myState = GAME;
 	    		break;
 	    	case C_CALIBRATION:
-	    		myState = CALIBRATE1;
+	    		myState = CALIBRATE_HELP;
 	    		break;
 	    	case C_HIGH_SCORES:
 	    		myState = HIGHSCORES;
 	    		break;
 	    	}
 	    	break;
-	    case CALIBRATE1:
-	    	myState = CALIBRATE2;
+	    case CALIBRATE_HELP:
+	    	myState = CALIBRATE_LEVEL;
 	    	break;
-	    case CALIBRATE2:
+	    case CALIBRATE_LEVEL:
+	    	// myState is changed automatically when ready
+	    	break;
+	    case CALIBRATE_MOVEMENT:
 	    	myState = MENU;
 	    	break;
 	    case GAME:
@@ -196,15 +212,14 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 	    	myState = MENU;
 	    	break;
 	    }
-	    Clock_start(clockHandle);
-//	    button0AllowExec = BOOLEAN_1; // This should be done somewhere else.
+	    Clock_start(clockHandleBtn0); // Start debounce timer
 	}
 }
 
-// Communication Task
 Void commTask(UArg arg0, UArg arg1) {
-	while ((myState == STARTUP)) {
-		// prevent data receive during startup or sensor calibration (Task_sleep breaks commTask functionality!)
+	// Communication Task
+	while (myState == STARTUP) {
+		// prevent data receive during startup or sensor calibration (Task_sleep breaks commTask functionality!?)
 //		Task_sleep(100000 / Clock_tickPeriod);
 	}
 	enum diyBoolean bufferZeroed = BOOLEAN_0;
@@ -215,22 +230,22 @@ Void commTask(UArg arg0, UArg arg1) {
 	if(result != true) {
 		System_abort("Wireless receive mode failed");
 	}
-	int i; // General for-variable
+	uint32_t i; // General for-variable
     while (1) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
+//            Receive6LoWPAN(IEEE80154_SERVER_ADDR, payload, 16);
             if (myState == GAME) {
             	for (i = 0; i < 8; i++) {
-            		message[i] = payload[i+1];
+            		inGameRXMsg[i] = payload[i+1];
             	}
             	for (i = 4; i > 0; i--) {
             		trackBuffer[i] = trackBuffer[i-1];
             	}
             	trackBuffer[0] = payload[0];
-                newTrackAvailable = 1;
+                newTrackAvailable = BOOLEAN_1;
                 gameScore++;
-//                System_printf("ok\n");
             } else if (myState == MENU) {
             	if (!bufferZeroed) {
             		for (i = 4; i > 0; i--) {
@@ -243,11 +258,8 @@ Void commTask(UArg arg0, UArg arg1) {
     }
 }
 
-
-
-
-// Acceleration/gyro sensor task
 Void MPU9250Task(UArg arg0, UArg arg1) {
+	// Acceleration/gyro sensor task
 	// Following part is critical and other tasks wait for myState to change:
 	I2C_Handle      i2cMPU;
 	I2C_Params      i2cMPUParams;
@@ -264,133 +276,90 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 	System_printf("MPU9250: Power ON\n");
 	System_flush();
 	mpu9250_setup(&i2cMPU);
-	// Critical ends
-
+	// Critical ends, allow other tasks to resume:
 	if (myState == STARTUP) {
 		myState = MENU;
 	} else {
 		System_abort("MPU9250Task found erroneous myState, aborting\n");
 	}
 
-	// Creating calWait variable to ensure calibration task waits for sensor setup
-	uint8_t calWait = 1; // How to make a boolean??
-//	uint8_t calIndex = 0;
-    float maxX = 0;
-    float minX = 0;
-    float minZ = 0;
+    double ax_sampled;
+    double ay_sampled;
+    double az_sampled;
+    uint32_t i; // General for-variable
 	while (1) {
 		switch (myState) {
 		case MENU:
 			mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-			if (ay - ay_off< ACC_LO_THERSHOLD) {
+			if (ay - ay_off < ACC_LO_THERSHOLD) {
 				cursorPos = C_NEW_GAME;
 			} else if (ay - ay_off > ACC_HI_THERSHOLD) {
 				cursorPos = C_HIGH_SCORES;
 			} else {
 				cursorPos = C_CALIBRATION;
 			}
-			calWait = 1;
 			break;
 		case GAME:
 			mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
 			moveBall();
 			Task_sleep(100000 / Clock_tickPeriod);
 			break;
-		case CALIBRATE1:
-			// CALIBRATE1 is for waiting for user to lay device down
+		case CALIBRATE_HELP:
+	        calLevelReady = BOOLEAN_0;
+	        ax_sampled = 0;
+	        ay_sampled = 0;
+	        az_sampled = 0;
+	        calLeft = 0;
+	        calRight = 0;
+	        calFly = 0;
+	        while (myState == CALIBRATE_HELP) {
+				Task_sleep(100000 / Clock_tickPeriod);
+	        }
 			break;
-		case CALIBRATE2:
-		    if (calWait) {
-		        // Waiting for device to lay still after button is pressed
-		        Task_sleep(1000000 / Clock_tickPeriod);
-		        mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-		        ax_off = ax;
-		        ay_off = ay;
-		        az_off = az;
-		        calWait = 0;
-		        calLeft = 0;
-		        calRight = 0;
-		        calFly = 0;
-		        minX = 0;
-		        maxX = 0;
-		        minZ = 0;
-//		        calIndex = 0;
-		    }
+		case CALIBRATE_LEVEL:
+			Task_sleep(1000000 / Clock_tickPeriod); // Wait for device to lay still after button press
+			for (i = 0; i < CALIBRATE_LEVEL_SAMPLES; i++) {
+				mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
+				ax_sampled += ax;
+				ay_sampled += ay;
+				az_sampled += az;
+				Task_sleep(50000 / Clock_tickPeriod);
+			}
+			ax_off = ax_sampled / CALIBRATE_LEVEL_SAMPLES;
+			ay_off = ay_sampled / CALIBRATE_LEVEL_SAMPLES;
+			az_off = az_sampled / CALIBRATE_LEVEL_SAMPLES;
+			calLevelReady = BOOLEAN_1;
+			while (myState == CALIBRATE_LEVEL) {
+				Task_sleep(100000 / Clock_tickPeriod);
+	        }
+			break;
+		case CALIBRATE_MOVEMENT:
 		    mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
 		    // Pick largest and smallest ax & smallest az value for R, L & Fly (up) thresholds
-		    if (maxX < ax - ax_off) {
-		        maxX = ax - ax_off;
-		    } else if (minX > ax - ax_off) {
-		        minX = ax - ax_off;
+		    if (calRight < ax - ax_off) {
+		    	calRight = ax - ax_off;
+		    } else if (calLeft > ax - ax_off) {
+		    	calLeft = ax - ax_off;
 		    }
-		    if (minZ > az - az_off) {
-		        minZ = az - az_off;
+		    if (calFly > az - az_off) {
+		    	calFly = az - az_off;
 		    }
-//		    calIndex++;
-//		    if (calIndex == 200) {
-		        calLeft = minX;
-		        calRight = maxX;
-		        calFly = minZ;
-//		    }
 		    break;
 		}
-
-
-//		if (myState == MENU) {
-//			if (ay < ACC_LO_THERSHOLD) {
-//				cursorPos = C_NEW_GAME;
-//			} else if (ay > ACC_HI_THERSHOLD) {
-//				cursorPos = C_HIGH_SCORES;
-//			} else {
-//				cursorPos = C_CALIBRATION;
-//			}
-//	        calWait = 0;
-//		    // use data to move within menu
-//		} else if (myState == GAME) {
-//			moveBall();
-//			Task_sleep(100000 / Clock_tickPeriod);
-//		} else if (myState == CALIBRATE) {
-//		    if (calWait == 0) {
-//		        // Waiting for display task to print instructions to the user
-//		        Task_sleep(500000 / Clock_tickPeriod);
-//		        calWait = 1;
-//		        calLeft = 0;
-//		        calRight = 0;
-//		        calFly = 0;
-//		        calIndex = 0;
-//		        minX = 0;
-//		        maxX = 0;
-//		        minZ = 0;
-//		    }
-//		    // Pick largest and smallest ax & smallest az value for R, L & Fly (up) thresholds
-//		    if (maxX < ax) {
-//		        maxX = ax;
-//		    } else if (minX > ax) {
-//		        minX = ax;
-//		    }
-//		    if (minZ > az) {
-//		        minZ = az;
-//		    }
-//		    calIndex++;
-//		    if (calIndex == 200) {
-//		        calLeft = minX;
-//		        calRight = maxX;
-//		        calFly = minZ;
-//		    }
-//		}
 	}
 }
 
 Void displayTask(UArg arg0, UArg arg1) {
-// 96 x 96 px	16 x 12 char (char = 5 x 7 px)
+	// Specs: 96 x 96 px	&	16 x 12 char (char = 5 x 7 px)
 	Display_Params displayParams;
 	Display_Params_init(&displayParams);
-	displayParams.lineClearMode = DISPLAY_CLEAR_NONE;
-//		DISPLAY_CLEAR_NONE = 0,   !< Do not clear anything before writing
-//	    DISPLAY_CLEAR_LEFT,       !< Clear pixels to left of text on the line
-//	    DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
-//	    DISPLAY_CLEAR_BOTH        !< Clear pixels on both sides of text
+	displayParams.lineClearMode = 	DISPLAY_CLEAR_NONE;
+	//	DISPLAY_CLEAR_NONE = 0,   !< Do not clear anything before writing
+	//	DISPLAY_CLEAR_LEFT,       !< Clear pixels to left of text on the line
+	//	DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
+	//	DISPLAY_CLEAR_BOTH        !< Clear pixels on both sides of text
 
+	// Open display & pixel graphics drawing context
 	hDisplay = Display_open(Display_Type_LCD, &displayParams);
 	if (hDisplay == NULL) {
 		System_abort("Error initializing Display (hDisplay)\n");
@@ -423,38 +392,39 @@ Void displayTask(UArg arg0, UArg arg1) {
 		Task_sleep(100000 / Clock_tickPeriod);
 	}
 	while (1) {
-//		Display_clear(hDisplay);
 		switch (myState) {
 		case MENU:
-			Display_clear(hDisplay);
 			showMenu(hDisplay);
-			Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
 			break;
-		case CALIBRATE1:
-			showCalibration1(hDisplay);
-			// Task_sleeps built into showCalibration1
+		case CALIBRATE_HELP:
+			showCalibrateHelp(hDisplay);
+			while (myState == CALIBRATE_HELP) {
+				Task_sleep(100000 / Clock_tickPeriod);
+			}
 			break;
-		case CALIBRATE2:
-			showCalibration2(hDisplay);
-			// Task_sleeps built into showCalibration2
+		case CALIBRATE_LEVEL:
+			showCalibrateLevel(hDisplay);
+			break;
+		case CALIBRATE_MOVEMENT:
+			showCalibrateMovement(hDisplay);
 			break;
 		case GAME:
 			if (gameState == ALIVE) {
-				while (newTrackAvailable == 0) {
+				while (newTrackAvailable == BOOLEAN_0) {
 					Task_sleep(50000 / Clock_tickPeriod);
 				}
-				newTrackAvailable = 0;
-				Display_clear(hDisplay); // Do this as late as possible
+				newTrackAvailable = BOOLEAN_0;
+				Display_clear(hDisplay); // Do this as late as possible before GrFlush()
 				drawObstacles(pContext);
-				drawTrack(pContext, hDisplay); // after obstacles so bmps won't undo track lines
+				drawTrack(pContext, hDisplay); // After obstacles so that bmps won't undo track lines
 				updateBall();
 				drawBall(pContext);
-				GrFlush(pContext);
-				Task_sleep(900000 / Clock_tickPeriod);
-			} else if (gameState == GAMEOVER) { // Should work with just "else"
+				GrFlush(pContext); // Do this as soon as possible after Display_clear()
+				Task_sleep(500000 / Clock_tickPeriod); // 0,5 sec
+			} else if (gameState == GAMEOVER) {
 				showGameOver(hDisplay);
 				GrFlush(pContext);
-				Task_sleep(1000000 / Clock_tickPeriod); // 1sec
+				Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
 				myState = MENU;
 				gameState = ALIVE;
 			} else {
@@ -463,6 +433,9 @@ Void displayTask(UArg arg0, UArg arg1) {
 			break;
 		case HIGHSCORES:
 			showHighScores(hDisplay);
+			while (myState == HIGHSCORES) {
+				Task_sleep(100000 / Clock_tickPeriod);
+			}
 			break;
 		default:
 			System_abort("displayTask found erroneous myState, aborting");
@@ -478,8 +451,9 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Handle hCommTask;
     Task_Params commTaskParams;
 	
-//	Clock_Params debounceTimerParams = CreateTimer(7, debounceTimer);
-	clockHandle = createTimer(7, debounceTimer);
+    // Create debounce timer
+	clockHandleBtn0 = createTimer(7, debounceTimerBtn0);
+	clockHandleBtn1 = createTimer(7, debounceTimerBtn1);
 
     // Initialize board
     Board_initGeneral();
@@ -552,5 +526,3 @@ Void displayTask(UArg arg0, UArg arg1) {
     System_printf("after bios\n");
     return (0);
 }
-
-
