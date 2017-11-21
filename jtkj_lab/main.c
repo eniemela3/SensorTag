@@ -18,8 +18,13 @@
 #include <ti/mw/display/Display.h>
 #include <ti/mw/display/DisplayExt.h>
 
+#include "ExtFlash.h"
+
 // Board Header files
-#include "Board.h"
+#include <Board.h>
+
+// Include audio
+#include "audio.h"
 
 // jtkj Header files
 #include "wireless/comm_lib.h"
@@ -29,13 +34,16 @@
 #include <inttypes.h>
 
 // Obstacle graphics
-#include <graphics.h>
+#include "graphics.h"
 
 // Functions used by displayTask
-#include <display_functions.h>
+#include "display_functions.h"
 
 // Functions used to run the game
-//#include <game.h>
+// #include "game.h"
+
+#define STACKSIZE_audioTask 1024
+Char audioTaskStack[STACKSIZE_audioTask];
 
 #define STACKSIZE_commTask 2048
 Char commTaskStack[STACKSIZE_commTask];
@@ -75,6 +83,9 @@ static const I2CCC26XX_I2CPinCfg i2cMPUCfg = {
 
 // Global display handle
 Display_Handle hDisplay;
+
+// Buzzer configuration
+static PIN_Handle hBuzzer;
 
 // Pin Button1 configured as power button
 static PIN_Handle hPowerButton;
@@ -214,6 +225,42 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 	    }
 	    Clock_start(clockHandleBtn0); // Start debounce timer
 	}
+}
+
+Void audioTask(UArg arg0, UArg arg1) {
+    while (myState == STARTUP) {
+
+        Task_sleep(10000 / Clock_tickPeriod);
+    }
+    buzzerOpen(hBuzzer);
+    while (1) {
+        switch (myState) {
+        case MENU:
+                playNote(500, 50);
+                endNote();
+                Task_sleep(50000 / Clock_tickPeriod);
+
+            break;
+        case CALIBRATE_HELP:
+
+            break;
+        case CALIBRATE_LEVEL:
+
+            break;
+        case CALIBRATE_MOVEMENT:
+
+            break;
+        case GAME:
+
+            break;
+        case HIGHSCORES:
+
+            break;
+        default:
+
+            break;
+        }
+    }
 }
 
 Void commTask(UArg arg0, UArg arg1) {
@@ -450,6 +497,8 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Params displayTaskParams;
     Task_Handle hCommTask;
     Task_Params commTaskParams;
+    Task_Handle hAudioTask;
+    Task_Params audioTaskParams;
 	
     // Create debounce timer
 	clockHandleBtn0 = createTimer(7, debounceTimerBtn0);
@@ -521,8 +570,27 @@ Void displayTask(UArg arg0, UArg arg1) {
         System_abort("commTask create failed!");
     }
 
+    // Initialize audioTask
+    Task_Params_init(&audioTaskParams);
+    audioTaskParams.stackSize    = STACKSIZE_audioTask;
+    audioTaskParams.stack        = &audioTaskStack;
+    audioTaskParams.priority     = 2;
+    hAudioTask = Task_create(audioTask, &audioTaskParams, NULL);
+    if (hAudioTask == NULL) {
+        System_abort("audioTask create failed!");
+    }
+
+
+//    ExtFlashInfo_t* info = ExtFlash_info();
+//    // Initialize extFlash
+//    if (!ExtFlash_test()) {
+//        System_abort("Unable to access extFlash. System aborting...");
+//    }
+//
+
     System_printf("before bios\n");
     BIOS_start();
     System_printf("after bios\n");
+
     return (0);
 }

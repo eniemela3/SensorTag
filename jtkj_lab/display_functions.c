@@ -6,6 +6,7 @@
  */
 #include <ti/mw/display/Display.h>
 #include <ti/mw/display/DisplayExt.h>
+#include <display_functions.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <graphics.h>

@@ -9,7 +9,8 @@
 #define GAME_H_
 
 #include <inttypes.h>
-#include <display_functions.h>
+#include "display_functions.h"
+#include "ExtFlash.h"
 
 // Pixel graphics (some are not used anymore) TODO
 #define OBSTACLE_W 16

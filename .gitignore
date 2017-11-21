@@ -15,3 +15,7 @@
 !/jtkj_lab/display_functions.c
 !/jtkj_lab/display_functions.h
 !*.xlsx
+!/jtkj_lab/ExtFlash.c
+!/jtkj_lab/ExtFlash.h
+!/jtkj_lab/buzzer.c
+!/jtkj_lab/buzzer.h

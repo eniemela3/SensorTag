@@ -5,8 +5,9 @@
  *      Author: eniem
  */
 
+#include "game.h"
 #include <inttypes.h>
-#include <display_functions.h>
+#include "display_functions.h"
 
 enum mainState myState;
 enum gameStatus gameState;
