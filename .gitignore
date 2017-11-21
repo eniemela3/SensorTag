@@ -19,3 +19,5 @@
 !/jtkj_lab/ExtFlash.h
 !/jtkj_lab/buzzer.c
 !/jtkj_lab/buzzer.h
+!/jtkj_lab/audio.h
+!/jtkj_lab/audio.c
