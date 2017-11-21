@@ -139,7 +139,7 @@ Void showCalibrateLevel(Display_Handle hDisplay) {
     // When calibration ends:
     Display_print0(hDisplay, 10, 0, "DONE");
     Task_sleep(1000000 / Clock_tickPeriod);
-    myState = CALIBRATE_MOVEMENT;
+    calState = CALIBRATE_MOVEMENT;
 }
 
 Void showCalibrateMovement(Display_Handle hDisplay) {
@@ -155,7 +155,7 @@ Void showCalibrateMovement(Display_Handle hDisplay) {
     Display_print0(hDisplay, 10, 0, "PRESS TO FINISH");
 
     // Values that will change during calibration:
-    while (myState == CALIBRATE_MOVEMENT) {
+    while (calState == CALIBRATE_MOVEMENT) {
         sprintf(textLine, "%.2f", calRight);
         Display_print0(hDisplay, 5, 8, textLine);
         sprintf(textLine, "%.2f", calLeft); // Negative value is shown TODO
@@ -167,6 +167,7 @@ Void showCalibrateMovement(Display_Handle hDisplay) {
     // When calibration ends:
     Display_print0(hDisplay, 10, 0, "DONE           "); // Spaces because of DISPLAY_CLEAR_NONE
     Task_sleep(1000000 / Clock_tickPeriod); // At this time myState is already changed and user inputs are allowed TODO
+
 }
 
 Void showHighScores(Display_Handle hDisplay) {

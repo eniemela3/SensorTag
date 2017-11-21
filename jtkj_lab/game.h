@@ -10,7 +10,6 @@
 
 #include <inttypes.h>
 #include "display_functions.h"
-#include "ExtFlash.h"
 
 // Pixel graphics (some are not used anymore) TODO
 #define OBSTACLE_W 16
@@ -45,13 +44,20 @@ extern enum flyingState flyState;
 enum trackPosition {LEFT=0, RIGHT};
 extern enum trackPosition ballPos;
 
-// Main state machine
-enum mainState {STARTUP=0, MENU, GAME, CALIBRATE_HELP, CALIBRATE_LEVEL, CALIBRATE_MOVEMENT, HIGHSCORES};
+// Main state machine CALIBRATE_HELP, CALIBRATE_LEVEL, CALIBRATE_MOVEMENT
+enum mainState {STARTUP=0, MENU, GAME, CALIBRATE, HIGHSCORES};
 extern enum mainState myState;
+
+enum calibrationState {CALIBRATE_HELP=0, CALIBRATE_LEVEL, CALIBRATE_MOVEMENT};
+extern enum calibrationState calState;
 
 // Game state machine
 enum gameStatus {ALIVE=1, GAMEOVER=0};
 extern enum gameStatus gameState;
+
+// Setting for volume
+enum volumeState {MUTE=0, ANNOYING_AF};
+extern enum volumeState volume;
 
 // DIY boolean
 enum diyBoolean {BOOLEAN_0=0, BOOLEAN_1};

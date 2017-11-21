@@ -14,6 +14,8 @@ enum gameStatus gameState;
 enum obstaclePosition obstaclePos;
 enum trackPosition ballPos;
 enum flyingState flyState;
+enum calibrationState calState;
+enum volumeState volume = ANNOYING_AF;
 
 trackCoordinates trackCoord;
 float calLeft = ACC_LO_THERSHOLD * 2;

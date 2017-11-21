@@ -108,5 +108,15 @@
 
 void playNote(uint16_t note, uint16_t ms);
 void endNote();
+void playGonnaFlyNow();
+void playRiverside1();
+void playRiverside2();
+void playRiverside3();
+void playOneA();
+void playOneB();
+void playOneC();
+void playOneD();
+void playOne();
+void playEpicSaxGuy();
 
 #endif /* AUDIO_H_ */

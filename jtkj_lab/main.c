@@ -18,8 +18,6 @@
 #include <ti/mw/display/Display.h>
 #include <ti/mw/display/DisplayExt.h>
 
-#include "ExtFlash.h"
-
 // Board Header files
 #include <Board.h>
 
@@ -66,6 +64,10 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 // Clock handle
 Clock_Handle clockHandleBtn0;
 Clock_Handle clockHandleBtn1;
+
+// audioTask variables
+static Task_Handle hAudioTask;
+static Task_Params audioTaskParams;
 
 // MPU global variables
 static PIN_Handle hMpuPin;
@@ -123,6 +125,8 @@ PIN_Config cLed[] = {
 };
 static unsigned char inGameTXMessage[8] = "Tere";
 
+Void audioTaskRestart();
+
 Void debounceTimerBtn0(UArg arg0) {
 	// Sets flag to allow Button0 to function after button pressed
     button0AllowExec = BOOLEAN_1;
@@ -166,11 +170,12 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 		    PINCC26XX_setWakeup(cPowerWake);
 			Power_shutdown(NULL,0);
 			break;
-		case CALIBRATE_HELP:
-			break;
-	    case CALIBRATE_LEVEL:
-			break;
-	    case CALIBRATE_MOVEMENT:
+		case CALIBRATE:
+			if (volume == ANNOYING_AF) {
+				volume = MUTE;
+			} else {
+				volume = ANNOYING_AF;
+			}
 			break;
 	    case GAME:
 		    Send6LoWPAN(IEEE80154_SERVER_ADDR, inGameTXMessage, 8);
@@ -197,22 +202,22 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 	    		myState = GAME;
 	    		break;
 	    	case C_CALIBRATION:
-	    		myState = CALIBRATE_HELP;
+	    		myState = CALIBRATE;
+	    		calState = CALIBRATE_HELP;
 	    		break;
 	    	case C_HIGH_SCORES:
 	    		myState = HIGHSCORES;
 	    		break;
 	    	}
 	    	break;
-	    case CALIBRATE_HELP:
-	    	myState = CALIBRATE_LEVEL;
-	    	break;
-	    case CALIBRATE_LEVEL:
-	    	// myState is changed automatically when ready
-	    	break;
-	    case CALIBRATE_MOVEMENT:
-	    	myState = MENU;
-	    	break;
+	    case CALIBRATE:
+			if (calState == CALIBRATE_HELP) {
+				calState = CALIBRATE_LEVEL;
+			} else if (calState == CALIBRATE_MOVEMENT) {
+				myState = MENU;
+				calState = CALIBRATE_HELP;
+			}
+			break;
 	    case GAME:
 	    	myState = MENU;
 	    	break;
@@ -229,38 +234,44 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 
 Void audioTask(UArg arg0, UArg arg1) {
     while (myState == STARTUP) {
-
         Task_sleep(10000 / Clock_tickPeriod);
     }
     buzzerOpen(hBuzzer);
-    while (1) {
-        switch (myState) {
-        case MENU:
-                playNote(500, 50);
-                endNote();
-                Task_sleep(50000 / Clock_tickPeriod);
-
-            break;
-        case CALIBRATE_HELP:
-
-            break;
-        case CALIBRATE_LEVEL:
-
-            break;
-        case CALIBRATE_MOVEMENT:
-
-            break;
-        case GAME:
-
-            break;
-        case HIGHSCORES:
-
-            break;
-        default:
-
-            break;
-        }
+	while (1) {
+		if (volume == ANNOYING_AF) {
+			switch (myState) {
+			case MENU:
+				playGonnaFlyNow();
+				break;
+			case CALIBRATE:
+				playOne();
+				break;
+			case GAME:
+				playRiverside1();
+				playRiverside1();
+				playRiverside2();
+				playRiverside3();
+				break;
+			case HIGHSCORES:
+				playEpicSaxGuy();
+				break;
+			default:
+				Task_sleep(1000000 / Clock_tickPeriod);
+				break;
+			}
+		} else {
+			Task_sleep(1000000 / Clock_tickPeriod);
+		}
     }
+}
+
+Void audioTaskRestart() {
+	Task_delete(hAudioTask);
+
+//	hAudioTask = Task_create(audioTask, &audioTaskParams, NULL);
+//	if (hAudioTask == NULL) {
+//		System_abort("audioTask create failed!");
+//	}
 }
 
 Void commTask(UArg arg0, UArg arg1) {
@@ -278,7 +289,7 @@ Void commTask(UArg arg0, UArg arg1) {
 		System_abort("Wireless receive mode failed");
 	}
 	uint32_t i; // General for-variable
-    while (1) {
+    while (0) {
         if (GetRXFlag() == true) {
             memset(payload, 0, 16);
             Receive6LoWPAN(&SenderAddr, payload, 16);
@@ -351,47 +362,53 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 			moveBall();
 			Task_sleep(100000 / Clock_tickPeriod);
 			break;
-		case CALIBRATE_HELP:
-	        calLevelReady = BOOLEAN_0;
-	        ax_sampled = 0;
-	        ay_sampled = 0;
-	        az_sampled = 0;
-	        calLeft = 0;
-	        calRight = 0;
-	        calFly = 0;
-	        while (myState == CALIBRATE_HELP) {
-				Task_sleep(100000 / Clock_tickPeriod);
-	        }
-			break;
-		case CALIBRATE_LEVEL:
-			Task_sleep(1000000 / Clock_tickPeriod); // Wait for device to lay still after button press
-			for (i = 0; i < CALIBRATE_LEVEL_SAMPLES; i++) {
+		case CALIBRATE:
+			switch (calState) {
+			case CALIBRATE_HELP:
+				calLevelReady = BOOLEAN_0;
+				ax_sampled = 0;
+				ay_sampled = 0;
+				az_sampled = 0;
+				calLeft = 0;
+				calRight = 0;
+				calFly = 0;
+				while (calState == CALIBRATE_HELP) {
+					Task_sleep(100000 / Clock_tickPeriod);
+				}
+				break;
+			case CALIBRATE_LEVEL:
+				Task_sleep(1000000 / Clock_tickPeriod); // Wait for device to lay still after button press
+				for (i = 0; i < CALIBRATE_LEVEL_SAMPLES; i++) {
+					mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
+					ax_sampled += ax;
+					ay_sampled += ay;
+					az_sampled += az;
+					Task_sleep(50000 / Clock_tickPeriod);
+				}
+				ax_off = ax_sampled / CALIBRATE_LEVEL_SAMPLES;
+				ay_off = ay_sampled / CALIBRATE_LEVEL_SAMPLES;
+				az_off = az_sampled / CALIBRATE_LEVEL_SAMPLES;
+				calLevelReady = BOOLEAN_1;
+				while (calState == CALIBRATE_LEVEL) {
+					Task_sleep(100000 / Clock_tickPeriod);
+				}
+				break;
+			case CALIBRATE_MOVEMENT:
 				mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-				ax_sampled += ax;
-				ay_sampled += ay;
-				az_sampled += az;
-				Task_sleep(50000 / Clock_tickPeriod);
+				// Pick largest and smallest ax & smallest az value for R, L & Fly (up) thresholds
+				if (calRight < ax - ax_off) {
+					calRight = ax - ax_off;
+				} else if (calLeft > ax - ax_off) {
+					calLeft = ax - ax_off;
+				}
+				if (calFly > az - az_off) {
+					calFly = az - az_off;
+				}
+				break;
 			}
-			ax_off = ax_sampled / CALIBRATE_LEVEL_SAMPLES;
-			ay_off = ay_sampled / CALIBRATE_LEVEL_SAMPLES;
-			az_off = az_sampled / CALIBRATE_LEVEL_SAMPLES;
-			calLevelReady = BOOLEAN_1;
-			while (myState == CALIBRATE_LEVEL) {
-				Task_sleep(100000 / Clock_tickPeriod);
-	        }
+		case HIGHSCORES:
+			Task_sleep(100000 / Clock_tickPeriod);
 			break;
-		case CALIBRATE_MOVEMENT:
-		    mpu9250_get_data(&i2cMPU, &ax, &ay, &az, &gx, &gy, &gz);
-		    // Pick largest and smallest ax & smallest az value for R, L & Fly (up) thresholds
-		    if (calRight < ax - ax_off) {
-		    	calRight = ax - ax_off;
-		    } else if (calLeft > ax - ax_off) {
-		    	calLeft = ax - ax_off;
-		    }
-		    if (calFly > az - az_off) {
-		    	calFly = az - az_off;
-		    }
-		    break;
 		}
 	}
 }
@@ -443,17 +460,22 @@ Void displayTask(UArg arg0, UArg arg1) {
 		case MENU:
 			showMenu(hDisplay);
 			break;
-		case CALIBRATE_HELP:
-			showCalibrateHelp(hDisplay);
-			while (myState == CALIBRATE_HELP) {
-				Task_sleep(100000 / Clock_tickPeriod);
+		case CALIBRATE:
+			switch (calState) {
+			case CALIBRATE_HELP:
+	//    		audioTaskRestart();
+				showCalibrateHelp(hDisplay);
+				while (calState == CALIBRATE_HELP) {
+					Task_sleep(100000 / Clock_tickPeriod);
+				}
+				break;
+			case CALIBRATE_LEVEL:
+				showCalibrateLevel(hDisplay);
+				break;
+			case CALIBRATE_MOVEMENT:
+				showCalibrateMovement(hDisplay);
+				break;
 			}
-			break;
-		case CALIBRATE_LEVEL:
-			showCalibrateLevel(hDisplay);
-			break;
-		case CALIBRATE_MOVEMENT:
-			showCalibrateMovement(hDisplay);
 			break;
 		case GAME:
 			if (gameState == ALIVE) {
@@ -497,8 +519,6 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Params displayTaskParams;
     Task_Handle hCommTask;
     Task_Params commTaskParams;
-    Task_Handle hAudioTask;
-    Task_Params audioTaskParams;
 	
     // Create debounce timer
 	clockHandleBtn0 = createTimer(7, debounceTimerBtn0);
@@ -579,14 +599,6 @@ Void displayTask(UArg arg0, UArg arg1) {
     if (hAudioTask == NULL) {
         System_abort("audioTask create failed!");
     }
-
-
-//    ExtFlashInfo_t* info = ExtFlash_info();
-//    // Initialize extFlash
-//    if (!ExtFlash_test()) {
-//        System_abort("Unable to access extFlash. System aborting...");
-//    }
-//
 
     System_printf("before bios\n");
     BIOS_start();
