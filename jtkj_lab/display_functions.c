@@ -19,7 +19,7 @@ char inGameRXMsg[9];
 
 void drawTrack(tContext *pContext, Display_Handle hDisplay) {
     // Draws the outline of the "river" track and displays a messaging area at the bottom
-    char msg[17]; // 14 should be enough
+    char msg[17]; // 14 should be enough IF messages are 8 chars max
     sprintf(msg, "MSG: %s", inGameRXMsg);
     Display_print0(hDisplay, 11, 0, msg);
     GrLineDrawH(pContext, 0, 95, trackCoord.trackMaxY);
@@ -29,8 +29,8 @@ void drawTrack(tContext *pContext, Display_Handle hDisplay) {
 
 void drawObstacles(tContext *pContext) {
     // Draws obstacles from received data
-    int i;
-    for (i=0; i < 5; i++) {
+    uint32_t i;
+    for (i = 0; i < 5; i++) {
         // Covering 5 seconds worth of trackBuffer
         if (trackBuffer[i] & LEFTSIDE_MOVING) { // Moving obstacle on left side of track
             drawDiagObstacle(trackCoord.obstLL_x, trackCoord.obst_y[i], pContext);
@@ -56,11 +56,9 @@ void drawObstacles(tContext *pContext) {
 void drawBall(tContext *pContext) {
     // Draws the ball in its correct position
     if (ballPos == LEFT) {
-        GrCircleFill(pContext, MID_COORD - TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
-//        GrCircleFill(pContext, trackCoord.ballL.x, trackCoord.ballL.y, ball_r);
+        GrCircleFill(pContext, trackCoord.ballL.x, trackCoord.ballL.y, ball_r);
     } else {
-        GrCircleFill(pContext, MID_COORD + TRACK_W/4, TRACK_H/10 + 4*TRACK_H/5, ball_r);
-//        GrCircleFill(pContext, trackCoord.ballR.x, trackCoord.ballR.y, ball_r);
+        GrCircleFill(pContext, trackCoord.ballR.x, trackCoord.ballR.y, ball_r);
     }
 }
 
@@ -68,34 +66,30 @@ void showMenu(Display_Handle hDisplay) {
     // Shows menu and handles cursor movement within
     Display_clear(hDisplay);
     Display_print0(hDisplay, 3, 1, "RIVER SURVIVAL");
-    enum cursorPosition pos; // Using pos allows for selecting menu item that is not next to cursor! TODO
+    enum cursorPosition pos;
     while (myState == MENU) {
         pos = cursorPos;
-        switch (pos) {
-        case C_NEW_GAME:
-            break;
-        case C_CALIBRATION:
-            break;
-        case C_HIGH_SCORES:
-            break;
-        }
         Display_print0(hDisplay, C_NEW_GAME, 3, "New game");
         Display_print0(hDisplay, C_CALIBRATION, 3, "Calibration");
         Display_print0(hDisplay, C_HIGH_SCORES, 3, "High scores");
         Display_print0(hDisplay, pos, 1, ">");
-        Task_sleep(400000 / Clock_tickPeriod);
+        Task_sleep(300000 / Clock_tickPeriod);
         Display_print0(hDisplay, pos, 1, " ");
-        Task_sleep(400000 / Clock_tickPeriod);
+        Task_sleep(300000 / Clock_tickPeriod); // Shouldn't be too long to avoid selecting something not shown
     }
 }
 
 void showGameOver(Display_Handle hDisplay) {
     // Displays the "game over" screen and score
     char text[8];
-    sprintf(text, "%d",gameScore);
-    Display_print0(hDisplay, 6, 3, "GAME OVER");
-    Display_print0(hDisplay, 8, 8, text);
-    gameScore = 0; // Maybe do this somewhere else?
+    Display_print0(hDisplay, 5, 2, "           ");
+    Display_print0(hDisplay, 6, 2, " GAME OVER ");
+    Display_print0(hDisplay, 7, 2, "   Score:  ");
+    Display_print0(hDisplay, 8, 2, "           ");
+    Display_print0(hDisplay, 9, 2, "           ");
+    sprintf(text, "%d", gameScore);
+    Display_print0(hDisplay, 8, 6, text);
+    gameScore = 0;
 }
 
 void showCalibrateHelp(Display_Handle hDisplay) {
@@ -110,6 +104,10 @@ void showCalibrateHelp(Display_Handle hDisplay) {
     Display_print0(hDisplay, 8, 0, "Then you can");
     Display_print0(hDisplay, 9, 0, "set thresholds");
     Display_print0(hDisplay, 10, 0, "for movement.");
+
+	while (calState == CALIBRATE_HELP) {
+		Task_sleep(100000 / Clock_tickPeriod);
+	}
 }
 
 Void showCalibrateLevel(Display_Handle hDisplay) {
@@ -122,8 +120,7 @@ Void showCalibrateLevel(Display_Handle hDisplay) {
 
     // Values that will change during calibration:
     while (calLevelReady == BOOLEAN_0) {
-        Task_sleep(100000 / Clock_tickPeriod); // Update display every 0.1 seconds
-    }
+        Task_sleep(100000 / Clock_tickPeriod);
     // For debugging the calibrated values:
 //    char textLine[16];
 //    Display_print0(hDisplay, 5, 0, "ax =");
@@ -135,6 +132,7 @@ Void showCalibrateLevel(Display_Handle hDisplay) {
 //    Display_print0(hDisplay, 6, 8, textLine);
 //    sprintf(textLine, "%.2f", az_off);
 //    Display_print0(hDisplay, 7, 8, textLine);
+    }
 
     // When calibration ends:
     Display_print0(hDisplay, 10, 0, "DONE");
@@ -158,15 +156,15 @@ Void showCalibrateMovement(Display_Handle hDisplay) {
     while (calState == CALIBRATE_MOVEMENT) {
         sprintf(textLine, "%.2f", calRight);
         Display_print0(hDisplay, 5, 8, textLine);
-        sprintf(textLine, "%.2f", calLeft); // Negative value is shown TODO
+        sprintf(textLine, "%.2f", -calLeft);
         Display_print0(hDisplay, 6, 8, textLine);
-        sprintf(textLine, "%.2f", calFly); // Negative value is shown TODO
+        sprintf(textLine, "%.2f", -calFly);
         Display_print0(hDisplay, 7, 8, textLine);
         Task_sleep(100000 / Clock_tickPeriod); // Update display every 0.1 seconds
     }
     // When calibration ends:
     Display_print0(hDisplay, 10, 0, "DONE           "); // Spaces because of DISPLAY_CLEAR_NONE
-    Task_sleep(1000000 / Clock_tickPeriod); // At this time myState is already changed and user inputs are allowed TODO
+    Task_sleep(1000000 / Clock_tickPeriod);
 
 }
 
@@ -178,6 +176,10 @@ Void showHighScores(Display_Handle hDisplay) {
     uint32_t i;
     for (i = 0; i < 10; i++) {
         sprintf(text, "%d", highScores[i]);
-        Display_print0(hDisplay, i+2, 8, text);
+        Display_print0(hDisplay, i+2, 4, text);
     }
+
+	while (myState == HIGHSCORES) {
+		Task_sleep(100000 / Clock_tickPeriod);
+	}
 }

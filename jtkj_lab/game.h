@@ -11,17 +11,12 @@
 #include <inttypes.h>
 #include "display_functions.h"
 
-// Pixel graphics (some are not used anymore) TODO
-#define OBSTACLE_W 16
-#define OBSTACLE_H 16
+// Pixel graphics, note: pixel graphics don't allow for a modular design. MID_COORD is critical!
 #define TRACK_H 86
 #define TRACK_W 32
 #define MID_COORD 48
 #define BALL_R_FLYING 6
 #define BALL_R 4
-extern uint8_t ball_r;
-
-// New pixel graphics, hard coded because pixel graphics don't allow for a modular design
 #define RIGHT_SIDE_X 70
 #define RIGHT_LANE_X 50
 #define LEFT_LANE_X 34
@@ -35,6 +30,9 @@ extern uint8_t ball_r;
 // Sensor thresholds (before possible calibration)
 #define ACC_HI_THERSHOLD 0.25
 #define ACC_LO_THERSHOLD -0.25
+
+// To hold current size of ball
+extern uint8_t ball_r;
 
 // Flying state machine
 enum flyingState {CAN_FLY=0, FLYING, CANT_FLY};
@@ -76,10 +74,16 @@ struct point {
    uint8_t y; // y = [0, 95]
 };
 
+//// Coordinates for drawing rectangle, not needed with pixel graphic obstacles
+//struct rect {
+//   struct point max;
+//   struct point min;
+//} displayRect;
+
 // Coordinates for drawing track, obstacles and ball
 typedef struct {
-    struct point ballR;	// Could use obstR_x instead
-    struct point ballL;	// Could use obstL_x instead
+    struct point ballR;	// Could use uint8_t obstR_x instead
+    struct point ballL;	// Could use uint8_t obstL_x instead
     uint8_t obst_y[5];
     uint8_t obstRR_x;	// Right side (out of track)
     uint8_t obstR_x;	// Right lane
@@ -89,9 +93,9 @@ typedef struct {
     uint8_t trackMinX;
     uint8_t trackMaxY;
 } trackCoordinates;
-trackCoordinates trackCoord;
+extern trackCoordinates trackCoord;
 
-// Default acceleration thresholds if calibration is never run:
+// Acceleration thresholds
 extern float calLeft;
 extern float calRight;
 extern float calFly;
@@ -101,8 +105,8 @@ extern float ax, ay, az, gx, gy, gz;
 extern float ax_off, ay_off, az_off, gx_off, gy_off, gz_off;
 
 extern uint8_t trackBuffer[5];
-extern uint8_t gameScore;
-extern uint8_t highScores[10];
+extern uint16_t gameScore;		// Should be more than enough
+extern uint16_t highScores[10];
 
 void updateBall();
 void moveBall();

@@ -55,19 +55,9 @@ Char MPU9250TaskStack[STACKSIZE_MPU9250Task];
 // How many samples are averaged for level calibration, make sure double can hold the sum of samples
 #define CALIBRATE_LEVEL_SAMPLES 5
 
-//// Coordinates for drawing rectangle
-//struct rect {
-//   struct point max;
-//   struct point min;
-//} displayRect;
-
 // Clock handle
 Clock_Handle clockHandleBtn0;
 Clock_Handle clockHandleBtn1;
-
-// audioTask variables
-static Task_Handle hAudioTask;
-static Task_Params audioTaskParams;
 
 // MPU global variables
 static PIN_Handle hMpuPin;
@@ -124,8 +114,6 @@ PIN_Config cLed[] = {
     PIN_TERMINATE
 };
 static unsigned char inGameTXMessage[8] = "Tere";
-
-Void audioTaskRestart();
 
 Void debounceTimerBtn0(UArg arg0) {
 	// Sets flag to allow Button0 to function after button pressed
@@ -219,7 +207,6 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 			}
 			break;
 	    case GAME:
-	    	myState = MENU;
 	    	break;
 	    case HIGHSCORES:
 	    	myState = MENU;
@@ -233,7 +220,7 @@ Void Button0Fxn(PIN_Handle handle, PIN_Id pinId) {
 }
 
 Void audioTask(UArg arg0, UArg arg1) {
-    while (myState == STARTUP) {
+    while (myState == STARTUP) { // Wait for MPUTask to initialize
         Task_sleep(10000 / Clock_tickPeriod);
     }
     buzzerOpen(hBuzzer);
@@ -247,10 +234,7 @@ Void audioTask(UArg arg0, UArg arg1) {
 				playOne();
 				break;
 			case GAME:
-				playRiverside1();
-				playRiverside1();
-				playRiverside2();
-				playRiverside3();
+				playRiverside();
 				break;
 			case HIGHSCORES:
 				playEpicSaxGuy();
@@ -260,24 +244,15 @@ Void audioTask(UArg arg0, UArg arg1) {
 				break;
 			}
 		} else {
-			Task_sleep(1000000 / Clock_tickPeriod);
+			Task_sleep(500000 / Clock_tickPeriod);
 		}
     }
-}
-
-Void audioTaskRestart() {
-	Task_delete(hAudioTask);
-
-//	hAudioTask = Task_create(audioTask, &audioTaskParams, NULL);
-//	if (hAudioTask == NULL) {
-//		System_abort("audioTask create failed!");
-//	}
 }
 
 Void commTask(UArg arg0, UArg arg1) {
 	// Communication Task
 	while (myState == STARTUP) {
-		// prevent data receive during startup or sensor calibration (Task_sleep breaks commTask functionality!?)
+		// prevent data receive during startup or sensor calibration (no task_sleep because of lowest priority)
 //		Task_sleep(100000 / Clock_tickPeriod);
 	}
 	enum diyBoolean bufferZeroed = BOOLEAN_0;
@@ -289,36 +264,36 @@ Void commTask(UArg arg0, UArg arg1) {
 		System_abort("Wireless receive mode failed");
 	}
 	uint32_t i; // General for-variable
-    while (0) {
+    while (1) {
         if (GetRXFlag() == true) {
-            memset(payload, 0, 16);
-            Receive6LoWPAN(&SenderAddr, payload, 16);
-//            Receive6LoWPAN(IEEE80154_SERVER_ADDR, payload, 16);
-            if (myState == GAME) {
-            	for (i = 0; i < 8; i++) {
-            		inGameRXMsg[i] = payload[i+1];
-            	}
-            	for (i = 4; i > 0; i--) {
-            		trackBuffer[i] = trackBuffer[i-1];
-            	}
-            	trackBuffer[0] = payload[0];
-                newTrackAvailable = BOOLEAN_1;
-                gameScore++;
-            } else if (myState == MENU) {
-            	if (!bufferZeroed) {
-            		for (i = 4; i > 0; i--) {
-            			trackBuffer[i] = 0;
-            		}
-            		bufferZeroed = BOOLEAN_1;
-            	}
-            }
-        } // No sleeps because of lowest priority
+        	memset(payload, 0, 16);
+        	Receive6LoWPAN(&SenderAddr, payload, 16);
+        	if (myState == GAME) {
+        		for (i = 0; i < 8; i++) {
+        			inGameRXMsg[i] = payload[i+1];
+        		}
+        		for (i = 4; i > 0; i--) {
+        			trackBuffer[i] = trackBuffer[i-1];
+        		}
+        		trackBuffer[0] = payload[0];
+        		newTrackAvailable = BOOLEAN_1;
+        		gameScore++;
+        	} else if (myState == MENU) {
+        		if (bufferZeroed == BOOLEAN_0) {
+        			for (i = 4; i > 0; i--) {
+        				trackBuffer[i] = 0;
+        			}
+        			bufferZeroed = BOOLEAN_1;
+        		}
+        	}
+        }
+        // No sleeps because of lowest priority
     }
 }
 
 Void MPU9250Task(UArg arg0, UArg arg1) {
 	// Acceleration/gyro sensor task
-	// Following part is critical and other tasks wait for myState to change:
+	// Following part is critical and other tasks should propably wait for myState to change:
 	I2C_Handle      i2cMPU;
 	I2C_Params      i2cMPUParams;
 
@@ -334,7 +309,7 @@ Void MPU9250Task(UArg arg0, UArg arg1) {
 	System_printf("MPU9250: Power ON\n");
 	System_flush();
 	mpu9250_setup(&i2cMPU);
-	// Critical ends, allow other tasks to resume:
+	// Critical ends, allow all tasks to resume:
 	if (myState == STARTUP) {
 		myState = MENU;
 	} else {
@@ -423,7 +398,7 @@ Void displayTask(UArg arg0, UArg arg1) {
 	//	DISPLAY_CLEAR_RIGHT,      !< Clear pixels to right of text on the line
 	//	DISPLAY_CLEAR_BOTH        !< Clear pixels on both sides of text
 
-	// Open display & pixel graphics drawing context
+	// Open display & pixel graphics drawing context:
 	hDisplay = Display_open(Display_Type_LCD, &displayParams);
 	if (hDisplay == NULL) {
 		System_abort("Error initializing Display (hDisplay)\n");
@@ -433,13 +408,18 @@ Void displayTask(UArg arg0, UArg arg1) {
 		System_abort("Error initializing Display (pContext)\n");
 	}
 
-	// Calculate graphics positions based on defined values
+	while (myState == STARTUP) {
+		// Waiting for MPUTask to initialize
+		Task_sleep(100000 / Clock_tickPeriod);
+	}
+
+	// Calculate graphics positions based on defined values:
 	trackCoord.trackMinX = MID_COORD - TRACK_W/2;
 	trackCoord.trackMaxX = MID_COORD + TRACK_W/2;
 	trackCoord.trackMaxY = TRACK_H;
-	trackCoord.ballR.x = MID_COORD - TRACK_W/4;
+	trackCoord.ballR.x = MID_COORD + TRACK_W/4;
 	trackCoord.ballR.y = TRACK_H/10 + 4*TRACK_H/5;
-	trackCoord.ballL.x = MID_COORD + TRACK_W/4;
+	trackCoord.ballL.x = MID_COORD - TRACK_W/4;
 	trackCoord.ballL.y = TRACK_H/10 + 4*TRACK_H/5;
 	trackCoord.obstR_x = RIGHT_LANE_X;
 	trackCoord.obstL_x = LEFT_LANE_X;
@@ -451,23 +431,18 @@ Void displayTask(UArg arg0, UArg arg1) {
 	trackCoord.obst_y[3] = ROW_3_Y;
 	trackCoord.obst_y[4] = ROW_4_Y;
 
-	while (myState == STARTUP) {
-		// prevent refreshing display during startup
-		Task_sleep(100000 / Clock_tickPeriod);
-	}
 	while (1) {
 		switch (myState) {
 		case MENU:
 			showMenu(hDisplay);
 			break;
+		case HIGHSCORES:
+			showHighScores(hDisplay);
+			break;
 		case CALIBRATE:
 			switch (calState) {
 			case CALIBRATE_HELP:
-	//    		audioTaskRestart();
 				showCalibrateHelp(hDisplay);
-				while (calState == CALIBRATE_HELP) {
-					Task_sleep(100000 / Clock_tickPeriod);
-				}
 				break;
 			case CALIBRATE_LEVEL:
 				showCalibrateLevel(hDisplay);
@@ -493,17 +468,11 @@ Void displayTask(UArg arg0, UArg arg1) {
 			} else if (gameState == GAMEOVER) {
 				showGameOver(hDisplay);
 				GrFlush(pContext);
-				Task_sleep(1000000 / Clock_tickPeriod); // 1 sec
+				Task_sleep(3000000 / Clock_tickPeriod); // 3 sec death screen
 				myState = MENU;
 				gameState = ALIVE;
 			} else {
 				System_abort("displayTask found erroneous gameState, aborting");
-			}
-			break;
-		case HIGHSCORES:
-			showHighScores(hDisplay);
-			while (myState == HIGHSCORES) {
-				Task_sleep(100000 / Clock_tickPeriod);
 			}
 			break;
 		default:
@@ -519,6 +488,8 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Params displayTaskParams;
     Task_Handle hCommTask;
     Task_Params commTaskParams;
+    Task_Handle hAudioTask;
+    Task_Params audioTaskParams;
 	
     // Create debounce timer
 	clockHandleBtn0 = createTimer(7, debounceTimerBtn0);

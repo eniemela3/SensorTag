@@ -15,7 +15,6 @@
 #include <ti/sysbios/knl/Clock.h>
 
 // Note frequencies from https://github.com/eYSIP-2017/eYSIP-2017_Game_Development-TI-RTOS/blob/master/Documentation/Breakout/Breakout%20-%20Code/Implemented%20Code/Console/tones.c
-
 #define NOTE_B0  31
 #define NOTE_C1  33
 #define NOTE_CS1 35
@@ -112,6 +111,7 @@ void playGonnaFlyNow();
 void playRiverside1();
 void playRiverside2();
 void playRiverside3();
+void playRiverside();
 void playOneA();
 void playOneB();
 void playOneC();

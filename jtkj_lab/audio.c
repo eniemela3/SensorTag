@@ -303,6 +303,23 @@ void playRiverside3() {
 	Task_sleep(120000 / Clock_tickPeriod);
 }
 
+void playRiverside() {
+	enum mainState state = myState;
+	playRiverside1();
+	if (myState != state) {
+		return;
+	}
+	playRiverside1();
+	if (myState != state) {
+		return;
+	}
+	playRiverside2();
+	if (myState != state) {
+		return;
+	}
+	playRiverside3();
+}
+
 void playOneA() {
 	playNote(NOTE_A4, 230); endNote();
 	Task_sleep(10000 / Clock_tickPeriod);

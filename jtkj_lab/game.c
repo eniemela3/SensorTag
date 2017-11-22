@@ -10,7 +10,7 @@
 #include "display_functions.h"
 
 enum mainState myState;
-enum gameStatus gameState;
+enum gameStatus gameState = ALIVE;
 enum obstaclePosition obstaclePos;
 enum trackPosition ballPos;
 enum flyingState flyState;
@@ -31,54 +31,56 @@ float gx_off = 0;
 float gy_off = 0;
 float gz_off = 0;
 
-enum diyBoolean newTrackAvailable;
+enum diyBoolean newTrackAvailable = BOOLEAN_1; // If server data not available, at least empty track gets shown
 enum diyBoolean calLevelReady;
-uint8_t gameScore = 0; // TODO is 255 enough? :D
+uint16_t gameScore = 0;
 
-uint8_t highScores[10] = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+uint16_t highScores[10] = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
 uint8_t trackBuffer[5];
 uint8_t ball_r = BALL_R;
+
 void moveBall() {
     // Move ball left / right / up
-    if (ax - ax_off < calLeft) { // ax_off needed?
+    if (ax - ax_off < calLeft) {
         ballPos = LEFT;
-    } else if (ax - ax_off > calRight) { // ax_off needed?
+    } else if (ax - ax_off > calRight) {
         ballPos = RIGHT;
     }
-    if ((az < calFly + az_off) && (flyState == CAN_FLY)) { // az_off IS needed
+    if ((az < calFly + az_off) && (flyState == CAN_FLY)) {
         ball_r = BALL_R_FLYING;
         flyState = FLYING;
     }
 }
 
 void updateBall() {
-    // This makes sure ball falls down from flying & dies when being hit
+    // This makes sure ball falls down from flying and dies & updates high scores when being hit
     if (gameState == ALIVE) {
         // Check if ball and obstacle overlap
         if (flyState == FLYING) {
             if (ballPos == LEFT) {
                 if (trackBuffer[4] & LEFTLANE_STATIC) {
                     gameState = GAMEOVER;
+                    updateHighScores();
                 }
             } else if (ballPos == RIGHT) {
                 if (trackBuffer[4] & RIGHTLANE_STATIC) {
                     gameState = GAMEOVER;
+                    updateHighScores();
                 }
             }
         } else { // flyState != FLYING
             if (ballPos == LEFT) {
                 if (trackBuffer[4] & LEFTLANE_MOVING) {
                     gameState = GAMEOVER;
+                    updateHighScores();
                 }
             } else if (ballPos == RIGHT) {
                 if (trackBuffer[4] & RIGHTLANE_MOVING) {
                     gameState = GAMEOVER;
+                    updateHighScores();
                 }
             }
         }
-    }
-    if (gameState == GAMEOVER) {
-        updateHighScores(); // Not logical to execute from updateBall() TODO
     }
 
     // flyState must be changed after overlap-check
@@ -95,7 +97,7 @@ void updateHighScores() {
     // Adds gameScore to list of high scores (if high enough)
     uint32_t i;
     uint32_t j;
-    for (i = 0; i < 10; i++) {
+    for (i = 0; i < 10; i++) { // Usually good scores don't exist
         // System_printf("ok\n"); // debug
         if (gameScore > highScores[i]) {
             for (j = 9; j > i; j--) {
@@ -105,5 +107,4 @@ void updateHighScores() {
             return;
         }
     }
-    // gameScore = 0;
 }
