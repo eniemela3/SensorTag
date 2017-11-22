@@ -2,6 +2,7 @@
  *  ======== main.c ========
  */
  #include <stdio.h>
+#include <inttypes.h>
 
 // XDCtools Header files
 #include <xdc/std.h>
@@ -29,8 +30,6 @@
 #include "sensors/bmp280.h"
 #include "sensors/mpu9250.h"
 
-#include <inttypes.h>
-
 // Obstacle graphics
 #include "graphics.h"
 
@@ -38,6 +37,7 @@
 #include "display_functions.h"
 
 // Functions used to run the game
+// #include not needed since game.h is included in other imports
 // #include "game.h"
 
 #define STACKSIZE_audioTask 1024
@@ -102,6 +102,7 @@ PIN_Config buttonConfig[] = {
     Board_BUTTON0 | PIN_INPUT_EN | PIN_PULLUP | PINCC26XX_WAKEUP_NEGEDGE,
     PIN_TERMINATE
 };
+
 enum diyBoolean button0AllowExec = BOOLEAN_1;
 enum diyBoolean button1AllowExec = BOOLEAN_1;
 
@@ -113,6 +114,7 @@ PIN_Config cLed[] = {
     Board_LED1 | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX,
     PIN_TERMINATE
 };
+
 static unsigned char inGameTXMessage[8] = "Tere";
 
 Void debounceTimerBtn0(UArg arg0) {
@@ -126,7 +128,7 @@ Void debounceTimerBtn1(UArg arg0) {
 }
 
 Clock_Handle createTimer(uint8_t period, Clock_FuncPtr clkFxn) {
-	// Function to create a new timer that runs once using Clock_start()
+    // Function to create a new timer that runs once using Clock_start()
     // Period in tenths of a second
 
     // RTOS clock variables
@@ -140,7 +142,7 @@ Clock_Handle createTimer(uint8_t period, Clock_FuncPtr clkFxn) {
 
     clkHandle = Clock_create((Clock_FuncPtr)clkFxn, 100000 * period / Clock_tickPeriod, &clkParams, NULL);
     if (clkHandle == NULL) {
-    	System_abort("Clock creat failed");
+    	System_abort("Clock create failed");
     }
     return clkHandle;
 }
@@ -154,25 +156,25 @@ Void powerButtonFxn(PIN_Handle handle, PIN_Id pinId) {
 		    Display_clear(hDisplay);
 		    Display_close(hDisplay);
 		    Task_sleep(100000 / Clock_tickPeriod);
-			PIN_close(hPowerButton);
+		    PIN_close(hPowerButton);
 		    PINCC26XX_setWakeup(cPowerWake);
-			Power_shutdown(NULL,0);
-			break;
+		    Power_shutdown(NULL,0);
+		    break;
 		case CALIBRATE:
-			if (volume == ANNOYING_AF) {
-				volume = MUTE;
-			} else {
-				volume = ANNOYING_AF;
-			}
-			break;
-	    case GAME:
+		    if (volume == ANNOYING_AF) {
+			volume = MUTE;
+		    } else {
+			volume = ANNOYING_AF;
+		    }
+		    break;
+	    	case GAME:
 		    Send6LoWPAN(IEEE80154_SERVER_ADDR, inGameTXMessage, 8);
 		    PIN_setOutputValue(hLed, Board_LED0, !PIN_getOutputValue(Board_LED0));
-			break;
-	    case HIGHSCORES:
-			break;
-	    default:
-			break;
+		    break;
+	   	 case HIGHSCORES:
+		    break;
+	  	  default:
+		    break;
 		}
 	    Clock_start(clockHandleBtn1); // Start debounce timer
 	}
@@ -480,7 +482,8 @@ Void displayTask(UArg arg0, UArg arg1) {
 		}
 	}
 }
-Int main(void) {
+
+Int main(void) {
     // Task variables
     Task_Handle hMPU9250Task;
     Task_Params MPU9250TaskParams;
@@ -491,7 +494,7 @@ Void displayTask(UArg arg0, UArg arg1) {
     Task_Handle hAudioTask;
     Task_Params audioTaskParams;
 	
-    // Create debounce timer
+    // Create debounce timers
 	clockHandleBtn0 = createTimer(7, debounceTimerBtn0);
 	clockHandleBtn1 = createTimer(7, debounceTimerBtn1);
 
