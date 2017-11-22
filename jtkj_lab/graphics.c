@@ -1,6 +1,7 @@
 #include <ti/mw/display/Display.h>
 #include <ti/mw/display/DisplayExt.h>
 #include <inttypes.h>
+#include "graphics.h"
 
 /*
  * graphics.c
